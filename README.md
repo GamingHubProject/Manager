@@ -6,13 +6,9 @@ Gaming Hub Manager is a standalone Azuriom plugin that owns package lifecycle ma
 - [Docker installation](DOCKER-INSTALL.md)
 - [Architecture](docs/ARCHITECTURE.md)
 
-# CachyOS
+# One line install
 ```bash
-curl -fsSL https://raw.githubusercontent.com/GamingHubProject/Manager/main/scripts/install.sh -o /tmp/gaming-hub-install.sh; and bash /tmp/gaming-hub-install.sh
-```
-# Ubuntu
-```bash
-curl -fsSL https://raw.githubusercontent.com/GamingHubProject/Manager/main/scripts/install.sh -o /tmp/gaming-hub-install.sh && bash /tmp/gaming-hub-install.sh
+set installer (mktemp); and curl -fL -H "Cache-Control: no-cache, no-store" -H "Pragma: no-cache" "https://raw.githubusercontent.com/GamingHubProject/Manager/main/scripts/install.sh?nocache="(date +%s)"-"$fish_pid -o "$installer"; and bash "$installer"; rm -f "$installer"
 ```
 
 ## Responsibilities
