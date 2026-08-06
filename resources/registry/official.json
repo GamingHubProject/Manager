@@ -1,8 +1,8 @@
 {
   "schema": 1,
-  "id": "rosesofdorns-official",
-  "name": "RosesOfDorns official registry",
-  "homepage": "https://github.com/RosesOfDorns",
+  "id": "GamingHub-official",
+  "name": "GamingHub Maniger OFFICIAL REGISTRY",
+  "homepage": "https://github.com/GamingHubProject",
   "extensions": [
     {
       "id": "gaming-hub-core",
