@@ -25,7 +25,9 @@ bash "$installer"
 rm -f "$installer"
 ```
 
-After it go to https://your-domain.example/install/game/custom and finish the installattion
+After it go to https://your-domain.example/install/game/custom and finish the installation
+
+install/game/custom because we will use the GamingHub Core and Panel to add as many games/servers as we want.
 
 ## Responsibilities
 
