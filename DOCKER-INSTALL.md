@@ -100,17 +100,17 @@ docker compose ps
 Run:
 
 ```bash
-MANAGER_ZIP="$(find "$HOME/Downloads" \
-  -maxdepth 1 \
-  -type f \
-  -name 'gaming-hub-manager-v*.zip' \
-  | sort -V \
-  | tail -n 1)"
+set MANAGER_ZIP (find ~/Downloads \
+    -maxdepth 1 \
+    -type f \
+    -name 'gaming-hub-manager-v*.zip' \
+    | sort -V \
+    | tail -n 1)
 
-if [ -z "$MANAGER_ZIP" ]; then
-  echo "No Gaming Hub Manager ZIP was found in ~/Downloads"
-  exit 1
-fi
+if test -z "$MANAGER_ZIP"
+    echo "No Gaming Hub Manager ZIP was found in ~/Downloads"
+    exit 1
+end
 
 echo "Using: $MANAGER_ZIP"
 ```
