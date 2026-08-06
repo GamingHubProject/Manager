@@ -4,8 +4,9 @@ Gaming Hub Manager is a standalone Azuriom plugin that owns package lifecycle ma
 
 - [Installation guide](INSTALL.md)
 - [Docker installation](DOCKER-INSTALL.md)
-- [Upgrade guide](UPGRADE.md)
 - [Architecture](docs/ARCHITECTURE.md)
+
+  
 
 ## Responsibilities
 
