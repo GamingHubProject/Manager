@@ -2,6 +2,10 @@
 
 Gaming Hub Manager is a standalone Azuriom plugin that owns package lifecycle management for the Gaming Hub ecosystem. It does **not** require Gaming Hub Core and does not expose game, server, provider, panel, or Shared Data Gateway controls.
 
+- [Installation guide](INSTALL.md)
+- [Upgrade guide](UPGRADE.md)
+- [Architecture](docs/ARCHITECTURE.md)
+
 ## Responsibilities
 
 - official and custom registries;
@@ -52,5 +56,3 @@ Existing Gaming Hub Core and Panel packages can be installed and managed without
 Rollback restores plugin files, Manager metadata, and the captured enabled state. It does not reverse package database migrations or delete package-owned database data. Uninstall intentionally removes executable package files while retaining package data so a recovery backup can be restored.
 
 Registry refresh also invalidates GitHub release metadata, so newly published matching releases appear without editing the registry version.
-
-See [INSTALL.md](INSTALL.md), [UPGRADE.md](UPGRADE.md), [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/MIGRATION.md](docs/MIGRATION.md), and [docs/VIEW_CONTRACTS.md](docs/VIEW_CONTRACTS.md).
