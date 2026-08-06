@@ -25,6 +25,8 @@ bash "$installer"
 rm -f "$installer"
 ```
 
+After it go to https://your-domain.example/install/game/custom and finish the installattion
+
 ## Responsibilities
 
 - official and custom registries;
