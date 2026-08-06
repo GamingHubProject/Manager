@@ -41,7 +41,7 @@ Before installing Gaming Hub Manager, make sure your server has:
 
 # Installation
 
-Install Azuriom if you didnt yet. (guide:install_Azuriom.md)
+Install Azuriom if you didnt yet. - [Installation guide](install_Azuriom.md)
 
 Gaming Hub Manager is the only Gaming Hub package that must currently be installed manually.
 
