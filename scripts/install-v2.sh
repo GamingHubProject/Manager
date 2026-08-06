@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
+INSTALLER_VERSION="2.0-menu"
 AZURIOM_VERSION="1.2.12"
 INSTALL_DIR="/opt/azuriom"
 AZURIOM_URL="https://github.com/Azuriom/Azuriom/releases/download/v${AZURIOM_VERSION}/Azuriom-${AZURIOM_VERSION}.zip"
@@ -52,10 +53,155 @@ else
 fi
 
 clear
-printf '\033[1;35mGaming Hub Manager - Fresh Azuriom Installer\033[0m\n'
+printf '\033[1;35mGaming Hub Manager - Azuriom Installer\033[0m\n'
+printf 'Installer version: %s\n' "$INSTALLER_VERSION"
 printf 'Official Azuriom %s + PostgreSQL + latest stable Gaming Hub Manager\n' "$AZURIOM_VERSION"
 printf '\nAzuriom is downloaded unchanged from its official GitHub release.\n'
 printf 'Gaming Hub Manager is added only as a separate plugin.\n\n'
+
+find_docker_command() {
+    if ! command_exists docker; then
+        return 1
+    fi
+
+    if docker info >/dev/null 2>&1; then
+        DOCKER=(docker)
+        return 0
+    fi
+
+    if "${SUDO[@]}" docker info >/dev/null 2>&1; then
+        DOCKER=("${SUDO[@]}" docker)
+        return 0
+    fi
+
+    return 1
+}
+
+azuriom_resources_exist() {
+    if [[ -e "$INSTALL_DIR" ]]; then
+        return 0
+    fi
+
+    if ! find_docker_command; then
+        return 1
+    fi
+
+    local container
+    for container in azuriom_nginx azuriom_app azuriom_db; do
+        if "${DOCKER[@]}" container inspect "$container" >/dev/null 2>&1; then
+            return 0
+        fi
+    done
+
+    if "${DOCKER[@]}" volume inspect azuriom_db_data >/dev/null 2>&1; then
+        return 0
+    fi
+
+    if "${DOCKER[@]}" network inspect azuriom_azuriom >/dev/null 2>&1; then
+        return 0
+    fi
+
+    return 1
+}
+
+remove_existing_installation() {
+    local action_name="$1"
+
+    warn "This will permanently delete:"
+    printf '  - %s\n' "$INSTALL_DIR"
+    printf '  - Azuriom containers and network\n'
+    printf '  - PostgreSQL volume azuriom_db_data\n'
+    printf '  - Azuriom users, settings, uploads and plugin data\n'
+    printf '  - %s\n\n' "$CREDENTIAL_FILE"
+
+    local confirmation
+    read -r -p "Type ${action_name} to continue: " confirmation
+
+    if [[ "$confirmation" != "$action_name" ]]; then
+        info "Cancelled. Nothing was deleted."
+        exit 0
+    fi
+
+    if find_docker_command; then
+        if [[ -f "$INSTALL_DIR/docker-compose.yml" ]]; then
+            (
+                cd "$INSTALL_DIR"
+                "${DOCKER[@]}" compose down -v --remove-orphans
+            ) || warn "Compose cleanup was incomplete; trying direct Docker cleanup."
+        fi
+
+        "${DOCKER[@]}" rm -f azuriom_nginx azuriom_app azuriom_db >/dev/null 2>&1 || true
+        "${DOCKER[@]}" volume rm azuriom_db_data >/dev/null 2>&1 || true
+        "${DOCKER[@]}" network rm azuriom_azuriom >/dev/null 2>&1 || true
+    else
+        warn "Docker is unavailable. Removing files only; Docker resources may need manual cleanup."
+    fi
+
+    "${SUDO[@]}" rm -rf "$INSTALL_DIR"
+    rm -f "$CREDENTIAL_FILE"
+    info "Existing Azuriom installation removed."
+}
+
+select_action() {
+    printf '\033[1mChoose an action:\033[0m\n'
+    printf '  1) Install a new Azuriom instance\n'
+    printf '  2) Reinstall / clean reset (deletes existing data)\n'
+    printf '  3) Uninstall completely (deletes existing data)\n'
+    printf '  4) Exit\n\n'
+
+    local choice
+    read -r -p "Selection [1]: " choice
+    choice="${choice:-1}"
+
+    case "$choice" in
+        1) ACTION="install" ;;
+        2) ACTION="reinstall" ;;
+        3) ACTION="uninstall" ;;
+        4) ACTION="exit" ;;
+        *) fail "Invalid selection. Run the installer again." ;;
+    esac
+}
+
+select_action
+
+if [[ "$ACTION" == "exit" ]]; then
+    info "Nothing changed."
+    exit 0
+fi
+
+if [[ "$ACTION" == "install" ]] && azuriom_resources_exist; then
+    warn "An existing installation was found at ${INSTALL_DIR}."
+    printf '\n  1) Reinstall it from scratch\n'
+    printf '  2) Uninstall it completely\n'
+    printf '  3) Exit without changes\n\n'
+
+    read -r -p "Selection [3]: " existing_choice
+    existing_choice="${existing_choice:-3}"
+
+    case "$existing_choice" in
+        1) ACTION="reinstall" ;;
+        2) ACTION="uninstall" ;;
+        3) info "Nothing changed."; exit 0 ;;
+        *) fail "Invalid selection. Run the installer again." ;;
+    esac
+fi
+
+if [[ "$ACTION" == "reinstall" ]]; then
+    if azuriom_resources_exist; then
+        remove_existing_installation "RESET"
+    else
+        info "No previous installation was found; continuing with a fresh install."
+    fi
+elif [[ "$ACTION" == "uninstall" ]]; then
+    if ! azuriom_resources_exist; then
+        info "No Azuriom installation was found. Nothing to uninstall."
+        exit 0
+    fi
+
+    remove_existing_installation "UNINSTALL"
+    printf '\nAzuriom and Gaming Hub Manager were completely uninstalled.\n'
+    exit 0
+fi
 
 # -----------------------------------------------------------------------------
 # Step 1: Detect system and install prerequisites
