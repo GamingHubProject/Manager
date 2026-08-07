@@ -44,6 +44,8 @@ final class PackageCatalog
             ];
         }
 
+        // Registry data is compared only after the installed set has been rebuilt
+        // from canonical package directories/manifests.
         $this->installedResolver->reconcileFilesystem();
 
         $sources = ExtensionSource::query()
@@ -61,6 +63,7 @@ final class PackageCatalog
                 $data = $this->sources->refresh($source, $force);
                 if (isset($data['registry'])) {
                     foreach ($data['registry']->extensions as $entry) {
+                        // Canonical package ID is the only registry-to-install join key.
                         $package = $installedById->get($entry->id);
                         $selection = null;
                         $discoveryError = null;
@@ -140,8 +143,10 @@ final class PackageCatalog
                         }
                     }
                 } elseif (isset($data['release'], $data['asset'], $data['version'])) {
-                    $package = $installed->firstWhere('source_id', $source->source_id)
-                        ?? $installed->first(fn ($candidate) => $this->normalizeRepository((string) $candidate->repository_url) === $this->normalizeRepository($source->url));
+                    // A direct source may retain a package association only through the
+                    // exact source_id recorded when Manager installed it. Repository URL,
+                    // display name and repository name never infer package identity.
+                    $package = $installed->firstWhere('source_id', $source->source_id);
                     $latestVersion = (string) $data['version'];
                     $id = $package?->extension_id ?? 'direct';
                     $state = $package === null ? 'available' : $this->state($latestVersion, $package, null, $installedById);
@@ -253,7 +258,7 @@ final class PackageCatalog
             $core = $installedById->get('gaming-hub-core');
             $constraint = $requirements['gaming-hub-core'];
             if ($core === null || ! is_string($constraint)
-                || ! $this->versions->satisfiesPackageDependency('gaming-hub-core', $core->installed_version, $constraint)) {
+                || ! $this->versions->satisfies($core->installed_version, $constraint)) {
                 return false;
             }
         }
@@ -265,7 +270,8 @@ final class PackageCatalog
         }
         foreach (($requirements['extensions'] ?? []) as $id => $constraint) {
             $dependency = $installedById->get($id);
-            if (! is_string($constraint) || $dependency === null || ! $this->versions->satisfiesPackageDependency((string) $id, $dependency->installed_version, $constraint)) {
+            if (! is_string($constraint) || $dependency === null
+                || ! $this->versions->satisfies($dependency->installed_version, $constraint)) {
                 return false;
             }
         }
@@ -285,12 +291,5 @@ final class PackageCatalog
         }
 
         return (string) (defined('AZURIOM_VERSION') ? AZURIOM_VERSION : config('app.version', '1.2.0'));
-    }
-
-    private function normalizeRepository(string $url): string
-    {
-        $url = strtolower(rtrim(trim($url), '/'));
-
-        return str_ends_with($url, '.git') ? substr($url, 0, -4) : $url;
     }
 }

@@ -10,6 +10,7 @@ use Azuriom\Plugin\GamingHubManager\Services\AzuriomPluginLifecycle;
 use Azuriom\Plugin\GamingHubManager\Services\ExtensionDependencyGuard;
 use Azuriom\Plugin\GamingHubManager\Services\ExtensionSafeMessage;
 use Azuriom\Plugin\GamingHubManager\Services\ExtensionUninstaller;
+use Azuriom\Plugin\GamingHubManager\Services\InstalledExtensionResolver;
 use Azuriom\Plugin\GamingHubManager\Services\ManagerRuntime;
 use Azuriom\Plugin\GamingHubManager\Services\PackageCatalog;
 use Illuminate\Http\RedirectResponse;
@@ -26,6 +27,7 @@ final class PackageController extends Controller
         private ExtensionDependencyGuard $dependencies,
         private ExtensionUninstaller $uninstaller,
         private ExtensionSafeMessage $messages,
+        private InstalledExtensionResolver $installed,
     ) {
     }
 
@@ -35,7 +37,7 @@ final class PackageController extends Controller
         if (! $this->runtime->isReady($runtimeStatus)) {
             return view('gaming-hub-manager::admin.migration-required', compact('runtimeStatus'));
         }
-        $extensionModel = InstalledExtension::query()->findOrFail($extension);
+        $extensionModel = $this->findInstalled($extension);
         $protectedPackage = $extensionModel->extension_id === 'gaming-hub-manager';
 
         return view('gaming-hub-manager::admin.package', [
@@ -55,7 +57,7 @@ final class PackageController extends Controller
         if (! $this->runtime->isReady($runtimeStatus)) {
             return view('gaming-hub-manager::admin.migration-required', compact('runtimeStatus'));
         }
-        $extensionModel = InstalledExtension::query()->findOrFail($extension);
+        $extensionModel = $this->findInstalled($extension);
         if ($extensionModel->extension_id === 'gaming-hub-manager') {
             return redirect()->route('gaming-hub-manager.admin.packages.show', $extensionModel)
                 ->with('error', 'Gaming Hub Manager reports its own installation but cannot uninstall itself.');
@@ -75,7 +77,7 @@ final class PackageController extends Controller
             return redirect()->route('gaming-hub-manager.admin.overview')
                 ->with('warning', 'Run the pending Gaming Hub Manager migrations before uninstalling packages.');
         }
-        $extensionModel = InstalledExtension::query()->findOrFail($extension);
+        $extensionModel = $this->findInstalled($extension);
         if ($extensionModel->extension_id === 'gaming-hub-manager') {
             return redirect()->route('gaming-hub-manager.admin.packages.show', $extensionModel)
                 ->with('error', 'Gaming Hub Manager reports its own installation but cannot uninstall itself.');
@@ -119,5 +121,12 @@ final class PackageController extends Controller
             return redirect()->route('gaming-hub-manager.admin.logs')
                 ->with('error', 'Uninstall failed: '.$this->messages->fromThrowable($exception));
         }
+    }
+
+    private function findInstalled(string $key): InstalledExtension
+    {
+        $this->installed->reconcileFilesystem();
+
+        return InstalledExtension::query()->findOrFail($key);
     }
 }

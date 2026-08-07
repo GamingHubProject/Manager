@@ -10,9 +10,7 @@
   },
   "require": {
     "php": ">=8.2",
-    "ext-zip": "*"
-  },
-  "suggest": {
-    "composer/semver": "Used for full semantic-version constraint validation when available."
+    "ext-zip": "*",
+    "composer/semver": "^3.4"
   }
 }

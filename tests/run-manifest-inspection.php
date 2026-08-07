@@ -23,6 +23,16 @@ namespace {
             $failures[] = $message;
         }
     };
+    $expectRejected = static function (callable $callback, string $needle, string $message) use (&$failures): void {
+        try {
+            $callback();
+            $failures[] = $message;
+        } catch (InvalidExtensionManifest $exception) {
+            if (! str_contains($exception->getMessage(), $needle)) {
+                $failures[] = $message.' Unexpected error: '.$exception->getMessage();
+            }
+        }
+    };
 
     $validator = new ExtensionManifestValidator();
     $managerPlugin = json_decode((string) file_get_contents(__DIR__.'/../plugin.json'), true, 512, JSON_THROW_ON_ERROR);
@@ -54,10 +64,62 @@ namespace {
         $expect($normalized->pluginDirectory === $legacyPlugin['id'], $legacyPlugin['id'].' directory was not inferred safely.');
     }
 
+    $basePlugin = [
+        'id' => 'gaming-hub-panel',
+        'name' => 'Gaming Hub Panel',
+        'version' => '0.2.0',
+        'description' => 'Panel integration.',
+        'authors' => ['Gaming Hub'],
+        'azuriom_api' => '1.2.0',
+    ];
+    $baseManifest = [
+        'schema' => 1,
+        'id' => 'gaming-hub-panel',
+        'version' => '0.2.0',
+        'type' => 'integration',
+        'package' => ['plugin_directory' => 'gaming-hub-panel', 'checksum_algorithm' => 'sha256'],
+    ];
+
+    $expectRejected(
+        fn () => $validator->validate($baseManifest, $basePlugin, ['id' => 'gaming-hub-core']),
+        'Package identity mismatch',
+        'Registry ID mismatch must be rejected.',
+    );
+    $mismatchedManifest = $baseManifest;
+    $mismatchedManifest['id'] = 'gaming-hub-core';
+    $mismatchedManifest['package']['plugin_directory'] = 'gaming-hub-core';
+    $expectRejected(
+        fn () => $validator->validate($mismatchedManifest, $basePlugin),
+        'Package identity mismatch',
+        'plugin.json and Gaming Hub manifest ID mismatch must be rejected.',
+    );
+    foreach (['Gaming-Hub-Panel', 'gaming_hub_panel'] as $invalidId) {
+        $invalid = $basePlugin;
+        $invalid['id'] = $invalidId;
+        $expectRejected(
+            fn () => $validator->validate(null, $invalid),
+            'Invalid package identifier',
+            'Alias/case/underscore package ID must be rejected: '.$invalidId,
+        );
+    }
+
+    $directoryMismatch = $baseManifest;
+    $directoryMismatch['package']['plugin_directory'] = 'gaming-hub-core';
+    $expectRejected(
+        fn () => $validator->validate($directoryMismatch, $basePlugin),
+        'plugin_directory must match the canonical package ID',
+        'Package directory alias/mismatch must be rejected.',
+    );
+    $expectRejected(
+        fn () => $validator->validate($baseManifest, $basePlugin, ['id' => 'Gaming-Hub-Panel']),
+        'Invalid package identifier',
+        'Registry package ID case alias must be rejected.',
+    );
+
     if ($failures !== []) {
         fwrite(STDERR, "FAILED\n- ".implode("\n- ", $failures)."\n");
         exit(1);
     }
 
-    echo "PASS: installed self-detection and legacy plugin.json package inspection\n";
+    echo "PASS: installed self-detection, legacy plugin inspection, and strict canonical package identity\n";
 }

@@ -14,8 +14,7 @@ final class ExtensionManifestValidator
         array $plugin,
         ?array $registryMetadata = null,
         bool $allowManagerInspection = false,
-    ): ExtensionManifest
-    {
+    ): ExtensionManifest {
         $manifest ??= [];
         $registryMetadata ??= [];
 
@@ -23,12 +22,9 @@ final class ExtensionManifestValidator
             throw new InvalidExtensionManifest('Unsupported package manifest schema.');
         }
 
-        $id = $this->id($manifest['id'] ?? $plugin['id'] ?? $registryMetadata['id'] ?? null);
+        $id = $this->canonicalId($manifest, $plugin, $registryMetadata);
         if ($id === 'gaming-hub-manager' && ! $allowManagerInspection) {
             throw new InvalidExtensionManifest('Gaming Hub Manager cannot manage or replace itself.');
-        }
-        if (($plugin['id'] ?? null) !== $id) {
-            throw new InvalidExtensionManifest('Package manifest and plugin identifier mismatch.');
         }
 
         $version = (string) ($manifest['version'] ?? $plugin['version'] ?? '');
@@ -48,7 +44,7 @@ final class ExtensionManifestValidator
         $package = is_array($manifest['package'] ?? null) ? $manifest['package'] : [];
         $directory = $this->id($package['plugin_directory'] ?? $id);
         if ($directory !== $id) {
-            throw new InvalidExtensionManifest('plugin_directory must match the plugin ID.');
+            throw new InvalidExtensionManifest('Package identity mismatch: plugin_directory must match the canonical package ID.');
         }
 
         $algorithm = strtolower((string) ($package['checksum_algorithm'] ?? 'sha256'));
@@ -100,6 +96,46 @@ final class ExtensionManifestValidator
         );
     }
 
+    private function canonicalId(array $manifest, array $plugin, array $registryMetadata): string
+    {
+        $declared = [
+            'plugin.json' => $plugin['id'] ?? null,
+            'gaming-hub-extension.json' => $manifest['id'] ?? null,
+            'registry' => $registryMetadata['id'] ?? null,
+        ];
+        $canonical = null;
+        $canonicalSource = null;
+
+        foreach ($declared as $source => $value) {
+            if ($value === null) {
+                continue;
+            }
+            if (! is_string($value)) {
+                throw new InvalidExtensionManifest('Invalid package identifier in '.$source.'.');
+            }
+
+            $candidate = $this->id($value);
+            if ($canonical === null) {
+                $canonical = $candidate;
+                $canonicalSource = $source;
+                continue;
+            }
+
+            if ($candidate !== $canonical) {
+                throw new InvalidExtensionManifest(
+                    'Package identity mismatch: '.$source.' declares '.$candidate
+                    .' but '.$canonicalSource.' declares '.$canonical.'.',
+                );
+            }
+        }
+
+        if ($canonical === null) {
+            throw new InvalidExtensionManifest('Missing canonical package identifier.');
+        }
+
+        return $canonical;
+    }
+
     private function requirements(array $manifest, array $plugin, array $registryMetadata): array
     {
         $requirements = [];
@@ -136,6 +172,7 @@ final class ExtensionManifestValidator
             if (! is_string($dependency) || ! is_string($constraint) || $dependency === '' || $constraint === '') {
                 throw new InvalidExtensionManifest('Invalid package dependency.');
             }
+            $this->id($dependency);
         }
         $requirements['extensions'] = $extensions;
 

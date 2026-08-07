@@ -83,7 +83,7 @@ final class PackageActionController extends Controller
             return $notReady;
         }
 
-        return $this->replace($request, InstalledExtension::query()->findOrFail($extension), false);
+        return $this->replace($request, $this->findInstalled($extension), false);
     }
 
     public function reinstall(Request $request, string $extension): RedirectResponse
@@ -92,7 +92,7 @@ final class PackageActionController extends Controller
             return $notReady;
         }
 
-        return $this->replace($request, InstalledExtension::query()->findOrFail($extension), true);
+        return $this->replace($request, $this->findInstalled($extension), true);
     }
 
     public function enable(Request $request, string $extension): RedirectResponse
@@ -101,7 +101,7 @@ final class PackageActionController extends Controller
             return $notReady;
         }
 
-        return $this->changeLifecycle($request, InstalledExtension::query()->findOrFail($extension), true);
+        return $this->changeLifecycle($request, $this->findInstalled($extension), true);
     }
 
     public function disable(Request $request, string $extension): RedirectResponse
@@ -109,14 +109,18 @@ final class PackageActionController extends Controller
         if ($notReady = $this->notReady()) {
             return $notReady;
         }
-        $extension = InstalledExtension::query()->findOrFail($extension);
+        $extension = $this->findInstalled($extension);
         if ($protected = $this->protectedPackage($extension, 'disable')) {
             return $protected;
         }
 
-        $dependents = $this->dependencies->dependentsOf($extension->extension_id);
+        $dependents = $this->dependencies->enabledDependentsOf($extension->extension_id);
         if ($dependents !== [] && ! $request->boolean('confirm_dependents')) {
-            return back()->with('error', 'Enabled dependents may be affected: '.implode(', ', array_column($dependents, 'id')).'.');
+            return back()->with(
+                'error',
+                'Disabling this package also requires disabling enabled dependents: '
+                    .implode(', ', array_column($dependents, 'id')).'. Confirm the dependent impact to continue.',
+            );
         }
 
         return $this->changeLifecycle($request, $extension, false);
@@ -127,7 +131,7 @@ final class PackageActionController extends Controller
         if ($notReady = $this->notReady()) {
             return $notReady;
         }
-        $extension = InstalledExtension::query()->findOrFail($extension);
+        $extension = $this->findInstalled($extension);
         $operation = $this->newOperation('verify', null, $request, $extension->extension_id);
         $lock = Cache::lock('gaminghub-manager:package-operation:'.$extension->extension_id, 120);
         $locked = false;
@@ -169,7 +173,7 @@ final class PackageActionController extends Controller
         if ($notReady = $this->notReady()) {
             return $notReady;
         }
-        $extension = InstalledExtension::query()->findOrFail($extension);
+        $extension = $this->findInstalled($extension);
         if ($protected = $this->protectedPackage($extension, 'back up')) {
             return $protected;
         }
@@ -242,29 +246,138 @@ final class PackageActionController extends Controller
         $operation = $this->newOperation($enable ? 'enable' : 'disable', null, $request, $extension->extension_id);
         $lock = Cache::lock('gaminghub-manager:package-operation:'.$extension->extension_id, 120);
         $locked = false;
+        $snapshot = null;
+        $changed = false;
         try {
             if (! $lock->get()) {
                 throw new \RuntimeException('Another lifecycle operation for this package is already running.');
             }
             $locked = true;
-            $operation->transition($enable ? 'enabling' : 'disabling', $enable ? 'Enabling package.' : 'Disabling package.');
-            $successful = $enable
-                ? $this->lifecycle->enable($extension->extension_id)
-                : $this->lifecycle->disable($extension->extension_id);
-            if (! $successful || $this->lifecycle->isEnabled($extension->extension_id) !== $enable) {
-                throw new \RuntimeException('Azuriom did not apply the requested plugin lifecycle state.');
-            }
-            $extension->update(['enabled_snapshot' => $enable, 'last_operation_result' => 'completed']);
-            $operation->complete($enable ? 'Package enabled.' : 'Package disabled.');
+            $this->installed->reconcileFilesystem();
+            $extension = $this->installed->resolve($extension->extension_id, true, false);
 
-            return back()->with('success', $enable ? 'Package enabled.' : 'Package disabled.');
+            if ($enable) {
+                $operation->transition('validating', 'Validating package and Azuriom dependencies before enable.');
+                $this->dependencies->assertEnableAllowed($extension->extension_id);
+                $operation->transition('enabling', 'Enabling package.');
+                if (! $this->lifecycle->enable($extension->extension_id)
+                    || ! $this->lifecycle->isEnabled($extension->extension_id)) {
+                    throw new \RuntimeException('Azuriom did not apply the requested plugin lifecycle state.');
+                }
+                $changed = true;
+            } else {
+                $snapshot = $this->dependencies->enabledStateSnapshot($extension->extension_id);
+                $operation->mergeContext([
+                    'enabled_before' => $snapshot['target']['enabled'],
+                    'affected_dependents' => array_keys($snapshot['dependents']),
+                ]);
+                $operation->transition('disabling_dependents', 'Disabling enabled dependents in reverse dependency order.');
+                foreach ($snapshot['disable_order'] as $dependentId) {
+                    $state = $snapshot['dependents'][$dependentId];
+                    if (! $state['enabled'] || ! $this->lifecycle->isEnabled($dependentId)) {
+                        continue;
+                    }
+                    if (! $this->lifecycle->disable($dependentId) || $this->lifecycle->isEnabled($dependentId)) {
+                        throw new \RuntimeException('Could not disable dependent package '.$dependentId.'.');
+                    }
+                    $changed = true;
+                    $operation->appendEvent('disabling_dependents', 'Disabled dependent package '.$dependentId.'.');
+                    $operation->save();
+                }
+
+                $operation->transition('disabling', 'Disabling package after its enabled dependents.');
+                if ($this->lifecycle->isEnabled($extension->extension_id)) {
+                    if (! $this->lifecycle->disable($extension->extension_id)
+                        || $this->lifecycle->isEnabled($extension->extension_id)) {
+                        throw new \RuntimeException('Azuriom did not apply the requested plugin lifecycle state.');
+                    }
+                    $changed = true;
+                }
+
+                foreach ($snapshot['dependents'] as $dependent) {
+                    if ($dependent['enabled'] && $this->lifecycle->isEnabled($dependent['id'])) {
+                        throw new \RuntimeException('Dependent package '.$dependent['id'].' remained enabled after dependency disable.');
+                    }
+                }
+            }
+
+            $this->lifecycle->refresh();
+            $this->installed->reconcileFilesystem();
+            $extension = $this->installed->resolve($extension->extension_id, true, false);
+            $extension->update([
+                'enabled_snapshot' => $enable,
+                'last_operation_result' => 'completed',
+            ]);
+            $operation->complete($enable
+                ? 'Package enabled with dependencies validated.'
+                : 'Package and enabled dependents disabled in dependency-safe order.');
+
+            return back()->with('success', $enable
+                ? 'Package enabled.'
+                : 'Package disabled; enabled dependents were disabled as required.');
         } catch (\Throwable $exception) {
+            $operation->mergeContext(['failed_stage' => $operation->current_stage ?: 'unknown']);
+            if (! $enable && $snapshot !== null && $changed) {
+                $operation->transition('rolling_back', 'Restoring pre-disable enabled state after lifecycle failure.');
+                $rollbackSucceeded = $this->restoreLifecycleSnapshot($snapshot, $operation);
+                $operation->forceFill([
+                    'rollback_attempted' => true,
+                    'rollback_succeeded' => $rollbackSucceeded,
+                ])->save();
+            }
+
             return $this->failure($operation, 'Lifecycle action', $exception);
         } finally {
             if ($locked) {
                 $lock->release();
             }
         }
+    }
+
+    /**
+     * @param array{target: array{id: string, enabled: bool}, dependents: array<string, array{id: string, enabled: bool, depth: int}>, disable_order: list<string>, restore_order: list<string>} $snapshot
+     */
+    private function restoreLifecycleSnapshot(array $snapshot, ExtensionOperation $operation): bool
+    {
+        try {
+            $targetId = $snapshot['target']['id'];
+            if ($snapshot['target']['enabled'] && ! $this->lifecycle->isEnabled($targetId)) {
+                $this->dependencies->assertEnableAllowed($targetId);
+                if (! $this->lifecycle->enable($targetId) || ! $this->lifecycle->isEnabled($targetId)) {
+                    throw new \RuntimeException('Could not restore target '.$targetId.'.');
+                }
+            }
+
+            foreach ($snapshot['restore_order'] as $dependentId) {
+                $state = $snapshot['dependents'][$dependentId];
+                if ($state['enabled'] && ! $this->lifecycle->isEnabled($dependentId)) {
+                    $this->dependencies->assertEnableAllowed($dependentId);
+                    if (! $this->lifecycle->enable($dependentId) || ! $this->lifecycle->isEnabled($dependentId)) {
+                        throw new \RuntimeException('Could not restore dependent '.$dependentId.'.');
+                    }
+                }
+            }
+            $this->lifecycle->refresh();
+            $this->installed->reconcileFilesystem();
+
+            return true;
+        } catch (\Throwable $rollbackException) {
+            $operation->mergeContext([
+                'restoration_failure_stage' => 'disable_rollback',
+                'restoration_failure_message' => $this->messages->fromThrowable($rollbackException),
+            ]);
+            $operation->appendEvent('rollback_failed', $this->messages->fromThrowable($rollbackException), 'error');
+            $operation->save();
+
+            return false;
+        }
+    }
+
+    private function findInstalled(string $key): InstalledExtension
+    {
+        $this->installed->reconcileFilesystem();
+
+        return InstalledExtension::query()->findOrFail($key);
     }
 
     private function notReady(): ?RedirectResponse
@@ -289,7 +402,6 @@ final class PackageActionController extends Controller
 
         return null;
     }
-
 
     private function protectedPackage(InstalledExtension $extension, string $action): ?RedirectResponse
     {
@@ -329,12 +441,17 @@ final class PackageActionController extends Controller
             $operation->fail($this->messages->fromThrowable($exception), strtolower(str_replace(' ', '_', $label)).'_failed');
         }
         $operation->refresh();
-        $stage = $operation->context['failed_stage'] ?? $operation->current_stage ?? 'unknown';
+        $stage = $operation->context['failed_stage']
+            ?? $operation->context['restoration_failure_stage']
+            ?? $operation->current_stage
+            ?? 'unknown';
+        $failedPlugin = $operation->context['restoration_failure_plugin'] ?? null;
+        $pluginMessage = $failedPlugin !== null ? ' Failed plugin: '.$failedPlugin.'.' : '';
         $rollback = $operation->rollback_attempted
             ? ($operation->rollback_succeeded ? ' Rollback succeeded.' : ' Rollback failed; inspect the operation log.')
             : '';
 
         return redirect()->route('gaming-hub-manager.admin.logs')
-            ->with('error', $label.' failed during '.$stage.'. '.$this->messages->fromThrowable($exception).$rollback);
+            ->with('error', $label.' failed during '.$stage.'.'.$pluginMessage.' '.$this->messages->fromThrowable($exception).$rollback);
     }
 }

@@ -58,10 +58,13 @@ final class ExtensionInstaller
             }
             $locked = true;
 
+            // Filesystem state is authoritative. Reconciliation removes stale DB rows
+            // before deciding whether the requested package is already installed.
+            $this->installed->reconcileFilesystem();
             if ($expectedExtensionId !== null && $expectedExtensionId !== 'direct') {
                 $expectedExtensionId = $this->paths->validateId($expectedExtensionId);
                 if (InstalledExtension::where('extension_id', $expectedExtensionId)->exists()
-                    || file_exists($this->paths->destination($expectedExtensionId))) {
+                    || is_dir($this->paths->destination($expectedExtensionId))) {
                     throw new ExtensionOperationFailed('This extension is already installed; use Update instead.');
                 }
             }
@@ -78,9 +81,10 @@ final class ExtensionInstaller
             );
 
             if ($expectedExtensionId !== null && $expectedExtensionId !== 'direct' && $manifest->id !== $expectedExtensionId) {
-                throw new ExtensionOperationFailed('Downloaded manifest ID does not match the selected extension.');
+                throw new ExtensionOperationFailed('Package identity mismatch: downloaded manifest ID does not match the selected extension.');
             }
 
+            // preparePackage() reconciles immediately before dependency evaluation.
             if (InstalledExtension::where('extension_id', $manifest->id)->exists()) {
                 throw new ExtensionOperationFailed('This extension is already installed; use Update instead.');
             }
@@ -110,27 +114,36 @@ final class ExtensionInstaller
                 ? 'Enabling the extension through the Azuriom lifecycle.'
                 : 'Leaving the extension disabled as requested.');
             if ($enable) {
+                // Re-evaluate from the installed filesystem after the atomic move. This
+                // validates both Gaming Hub dependencies and Azuriom's native enabled
+                // dependency semantics in the same runtime before enabling.
+                $this->dependencies->assertManifestEnableAllowed($manifest);
                 if (! $this->lifecycle->enable($manifest->id) || ! $this->lifecycle->isEnabled($manifest->id)) {
                     throw new ExtensionOperationFailed('Azuriom could not enable the newly installed extension.');
                 }
                 $enabled = true;
             }
 
-            $record = InstalledExtension::create($this->metadataValues(
-                $source,
-                $release,
-                $asset,
-                $manifest,
-                $actualChecksum,
-                $expectedChecksum !== null,
-                $actor,
-                $enabled,
-                null,
-                $this->hasher->hash($live),
-            ));
+            $record = InstalledExtension::updateOrCreate(
+                ['extension_id' => $manifest->id],
+                $this->metadataValues(
+                    $source,
+                    $release,
+                    $asset,
+                    $manifest,
+                    $actualChecksum,
+                    $expectedChecksum !== null,
+                    $actor,
+                    $enabled,
+                    null,
+                    $this->hasher->hash($live),
+                ),
+            );
 
-            $operation->transition('cleaning', 'Clearing plugin and application caches.');
+            $operation->transition('cleaning', 'Refreshing installed state and clearing plugin/application caches.');
             $this->lifecycle->refresh();
+            $this->installed->reconcileFilesystem();
+            $record = $this->installed->resolve($manifest->id, true, false);
             $this->cleanupNonFatal($work, $operation);
             $operation->complete('Package installed successfully.');
 
@@ -151,6 +164,7 @@ final class ExtensionInstaller
                     }
                     $record?->delete();
                     $this->lifecycle->refresh();
+                    $this->installed->reconcileFilesystem();
                 } catch (\Throwable) {
                     $rollbackSucceeded = false;
                 }
@@ -203,12 +217,14 @@ final class ExtensionInstaller
         $live = null;
         $wasEnabled = false;
         $disabled = false;
+        $dependentsDisabled = false;
         $oldMoved = false;
         $newMoved = false;
         $metadataWritten = false;
         $metadata = $installed->getAttributes();
         $currentManifest = null;
         $currentVersion = $installed->installed_version;
+        $enabledSnapshot = null;
 
         try {
             if (! $lock->get()) {
@@ -216,19 +232,26 @@ final class ExtensionInstaller
             }
             $locked = true;
 
-            $operation->transition('resolving', 'Resolving the installed extension and its current manifest.');
+            $operation->transition('resolving', 'Resolving the installed extension and its dependency graph.');
+            $this->installed->reconcileFilesystem();
+            $installed = $this->installed->resolve($extensionId, true, false);
+            $metadata = $installed->getAttributes();
             $live = $this->paths->destination($extensionId, true);
             $currentManifest = $this->installed->readManifest($live, $extensionId);
-            if ($currentManifest->id !== $installed->extension_id) {
-                throw new ExtensionOperationFailed('Installed extension metadata does not match the current manifest.');
-            }
             $currentVersion = $currentManifest->version;
+            $enabledSnapshot = $this->dependencies->enabledStateSnapshot($extensionId);
+            $wasEnabled = $enabledSnapshot['target']['enabled'];
+            $enabledDependents = array_values(array_filter(
+                $enabledSnapshot['dependents'],
+                static fn (array $dependent): bool => $dependent['enabled'],
+            ));
 
-            $wasEnabled = $this->lifecycle->isEnabled($extensionId);
             $operation->mergeContext([
                 'installed_version' => $currentVersion,
-                'metadata_version_before' => $installed->installed_version,
+                'metadata_version_before' => $metadata['installed_version'] ?? null,
                 'enabled_before' => $wasEnabled,
+                'affected_dependents' => array_keys($enabledSnapshot['dependents']),
+                'enabled_dependents_before' => array_column($enabledDependents, 'id'),
             ]);
 
             [$manifest, $actualChecksum, $staged] = $this->preparePackage(
@@ -243,7 +266,7 @@ final class ExtensionInstaller
             );
 
             if ($manifest->id !== $extensionId || $manifest->pluginDirectory !== $extensionId) {
-                throw new ExtensionOperationFailed('Update manifest ID does not match the installed extension.');
+                throw new ExtensionOperationFailed('Package identity mismatch: update manifest ID does not match the installed extension.');
             }
             $comparison = $this->versions->compare($manifest->version, $currentVersion);
             if ($comparison < 0) {
@@ -279,10 +302,13 @@ final class ExtensionInstaller
             $backupComplete = true;
             $operation->mergeContext(['backup' => $relativeBackup, 'backup_uuid' => $backupRecord->backup_uuid]);
 
+            $operation->transition('disabling_dependents', 'Disabling enabled dependents in reverse dependency order.');
+            $dependentsDisabled = $this->disableDependents($enabledSnapshot, $operation);
+
             $operation->transition('disabling', $wasEnabled
                 ? 'Disabling the extension before replacement.'
                 : 'Extension was already disabled; preserving that state.');
-            if ($wasEnabled) {
+            if ($wasEnabled && $this->lifecycle->isEnabled($extensionId)) {
                 $disableResult = $this->lifecycle->disable($extensionId);
                 $disabled = ! $this->lifecycle->isEnabled($extensionId);
                 if (! $disableResult || ! $disabled) {
@@ -309,18 +335,13 @@ final class ExtensionInstaller
             $this->lifecycle->refresh();
             $this->lifecycle->migrate($extensionId);
 
-            $operation->transition('enabling', $wasEnabled
-                ? 'Restoring the previously enabled state.'
-                : 'Keeping the extension disabled.');
-            if ($wasEnabled) {
-                if (! $this->lifecycle->enable($extensionId) || ! $this->lifecycle->isEnabled($extensionId)) {
-                    throw new ExtensionOperationFailed('Azuriom could not re-enable the updated extension.');
-                }
-            } elseif ($this->lifecycle->isEnabled($extensionId)) {
-                if (! $this->lifecycle->disable($extensionId)) {
-                    throw new ExtensionOperationFailed('Updated extension did not remain disabled.');
-                }
-            }
+            $operation->transition('restoring_target', $wasEnabled
+                ? 'Restoring the previously enabled target package.'
+                : 'Keeping the target package disabled.');
+            $this->restoreTargetState($enabledSnapshot, $operation, $manifest);
+
+            $operation->transition('restoring_dependents', 'Restoring previously enabled dependents in dependency order.');
+            $this->restoreDependentStates($enabledSnapshot, $operation);
 
             $installed->forceFill($this->metadataValues(
                 $source,
@@ -336,8 +357,10 @@ final class ExtensionInstaller
             ))->save();
             $metadataWritten = true;
 
-            $operation->transition('cleaning', 'Clearing caches and finalizing replacement data.');
+            $operation->transition('cleaning', 'Refreshing installed state and finalizing replacement data.');
             $this->lifecycle->refresh();
+            $this->installed->reconcileFilesystem();
+            $installed = $this->installed->resolve($extensionId, true, false);
             if ($previousSwap !== null && is_dir($previousSwap)) {
                 $this->paths->deleteDirectory($previousSwap);
                 $oldMoved = false;
@@ -349,10 +372,10 @@ final class ExtensionInstaller
             }
 
             $operation->complete($allowSameVersion
-                ? 'Package '.$extensionId.' reinstalled at '.$manifest->version.'.'
-                : 'Package updated from '.$currentVersion.' to '.$manifest->version.'.');
+                ? 'Package '.$extensionId.' reinstalled at '.$manifest->version.' with dependent state restored.'
+                : 'Package updated from '.$currentVersion.' to '.$manifest->version.' with dependent state restored.');
 
-            return $installed->refresh();
+            return $installed;
         } catch (ExtensionAlreadyCurrent $exception) {
             $operation->transition('cleaning', 'No replacement was required.');
             if ($currentManifest !== null && $installed->installed_version !== $currentVersion) {
@@ -369,16 +392,16 @@ final class ExtensionInstaller
         } catch (\Throwable $exception) {
             $failedStage = $operation->current_stage ?: 'unknown';
             $operation->mergeContext(['failed_stage' => $failedStage]);
-            $rollbackNeeded = $disabled || $oldMoved || $newMoved || $metadataWritten;
+            $rollbackNeeded = $disabled || $dependentsDisabled || $oldMoved || $newMoved || $metadataWritten;
             $rollbackSucceeded = null;
 
-            if ($rollbackNeeded) {
+            if ($rollbackNeeded && $enabledSnapshot !== null) {
                 $rollbackSucceeded = $this->rollbackUpdate(
                     $operation,
                     $installed,
                     $metadata,
                     $extensionId,
-                    $wasEnabled,
+                    $enabledSnapshot,
                     $live,
                     $previousSwap,
                     $backupPath,
@@ -442,14 +465,10 @@ final class ExtensionInstaller
             'version' => $manifest->version,
         ])->save();
 
-        // Refresh installed-package metadata from the filesystem before resolving
-        // dependencies so a package installed in the immediately preceding request
-        // is visible without a manual catalog refresh.
+        // Every dependency decision starts from a freshly reconciled filesystem view.
         $this->installed->reconcileFilesystem();
-
         $this->compatibility->assertCompatible(
             $manifest,
-            $this->coreVersion(),
             $this->azuriomVersion(),
             PHP_VERSION,
         );
@@ -458,7 +477,7 @@ final class ExtensionInstaller
         $this->paths->assertStagedDirectory($staged, $extract, $manifest->id);
         $operation->appendEvent(
             'validating',
-            'SHA-256 checksum, GitHub release version, asset filename, and package manifests verified'
+            'SHA-256 checksum, GitHub release version, asset filename, package identity, and manifests verified'
                 .($checksumSource !== null ? ' using '.$checksumSource : '').'.',
         );
         $operation->save();
@@ -466,19 +485,123 @@ final class ExtensionInstaller
         return [$manifest, $actualChecksum, $staged];
     }
 
+    /**
+     * @param array{target: array{id: string, enabled: bool}, dependents: array<string, array{id: string, enabled: bool, depth: int}>, disable_order: list<string>, restore_order: list<string>} $snapshot
+     */
+    private function disableDependents(array $snapshot, ExtensionOperation $operation): bool
+    {
+        $changed = false;
+        foreach ($snapshot['disable_order'] as $dependentId) {
+            $state = $snapshot['dependents'][$dependentId];
+            if (! $state['enabled'] || ! $this->lifecycle->isEnabled($dependentId)) {
+                continue;
+            }
+
+            if (! $this->lifecycle->disable($dependentId) || $this->lifecycle->isEnabled($dependentId)) {
+                $operation->mergeContext([
+                    'restoration_failure_plugin' => $dependentId,
+                    'restoration_failure_stage' => 'dependent_disable',
+                ]);
+                throw new ExtensionOperationFailed('Could not disable dependent package '.$dependentId.' before replacement.');
+            }
+            $changed = true;
+            $operation->appendEvent('disabling_dependents', 'Temporarily disabled dependent package '.$dependentId.'.');
+            $operation->save();
+        }
+
+        return $changed;
+    }
+
+    /**
+     * @param array{target: array{id: string, enabled: bool}, dependents: array<string, array{id: string, enabled: bool, depth: int}>, disable_order: list<string>, restore_order: list<string>} $snapshot
+     */
+    private function restoreTargetState(array $snapshot, ExtensionOperation $operation, ?ExtensionManifest $candidate = null): void
+    {
+        $extensionId = $snapshot['target']['id'];
+        $shouldBeEnabled = $snapshot['target']['enabled'];
+
+        if ($shouldBeEnabled && ! $this->lifecycle->isEnabled($extensionId)) {
+            if ($candidate !== null) {
+                $this->dependencies->assertManifestEnableAllowed($candidate);
+            } else {
+                $this->dependencies->assertEnableAllowed($extensionId);
+            }
+            if (! $this->lifecycle->enable($extensionId) || ! $this->lifecycle->isEnabled($extensionId)) {
+                $this->recordRestorationFailure($operation, $extensionId, 'target_restoration');
+                throw new ExtensionOperationFailed('Previously enabled target package '.$extensionId.' could not be restored.');
+            }
+        } elseif (! $shouldBeEnabled && $this->lifecycle->isEnabled($extensionId)) {
+            if (! $this->lifecycle->disable($extensionId) || $this->lifecycle->isEnabled($extensionId)) {
+                $this->recordRestorationFailure($operation, $extensionId, 'target_restoration');
+                throw new ExtensionOperationFailed('Previously disabled target package '.$extensionId.' did not remain disabled.');
+            }
+        }
+    }
+
+    /**
+     * @param array{target: array{id: string, enabled: bool}, dependents: array<string, array{id: string, enabled: bool, depth: int}>, disable_order: list<string>, restore_order: list<string>} $snapshot
+     */
+    private function restoreDependentStates(array $snapshot, ExtensionOperation $operation): void
+    {
+        foreach ($snapshot['restore_order'] as $dependentId) {
+            $state = $snapshot['dependents'][$dependentId];
+            if ($state['enabled']) {
+                if (! $this->lifecycle->isEnabled($dependentId)) {
+                    try {
+                        $this->dependencies->assertEnableAllowed($dependentId);
+                        if (! $this->lifecycle->enable($dependentId) || ! $this->lifecycle->isEnabled($dependentId)) {
+                            throw new ExtensionOperationFailed('Azuriom rejected the enable operation.');
+                        }
+                    } catch (\Throwable $exception) {
+                        $this->recordRestorationFailure($operation, $dependentId, 'dependent_restoration');
+                        throw new ExtensionOperationFailed(
+                            'Previously enabled dependent package '.$dependentId.' could not be restored: '.$this->messages->fromThrowable($exception),
+                        );
+                    }
+                }
+                $operation->appendEvent('restoring_dependents', 'Restored dependent package '.$dependentId.'.');
+                $operation->save();
+            } elseif ($this->lifecycle->isEnabled($dependentId)) {
+                if (! $this->lifecycle->disable($dependentId) || $this->lifecycle->isEnabled($dependentId)) {
+                    $this->recordRestorationFailure($operation, $dependentId, 'dependent_disabled_state');
+                    throw new ExtensionOperationFailed('Previously disabled dependent package '.$dependentId.' became enabled unexpectedly.');
+                }
+            }
+        }
+    }
+
+    private function recordRestorationFailure(ExtensionOperation $operation, string $pluginId, string $stage): void
+    {
+        $operation->mergeContext([
+            'restoration_failure_plugin' => $pluginId,
+            'restoration_failure_stage' => $stage,
+        ]);
+        $operation->appendEvent($stage, 'Enabled-state restoration failed for '.$pluginId.'.', 'error');
+        $operation->save();
+    }
+
+    /**
+     * @param array{target: array{id: string, enabled: bool}, dependents: array<string, array{id: string, enabled: bool, depth: int}>, disable_order: list<string>, restore_order: list<string>} $snapshot
+     */
     private function rollbackUpdate(
         ExtensionOperation $operation,
         InstalledExtension $installed,
         array $metadata,
         string $extensionId,
-        bool $wasEnabled,
+        array $snapshot,
         ?string $live,
         ?string $previousSwap,
         ?string $backupPath,
     ): bool {
-        $operation->transition('rolling_back', 'Restoring previous extension files, metadata, and enabled state.');
+        $operation->transition('rolling_back', 'Restoring previous extension files, metadata, and enabled dependency state.');
 
         try {
+            // Quiesce the complete affected graph before replacing the target files.
+            foreach ($snapshot['disable_order'] as $dependentId) {
+                if ($this->lifecycle->isEnabled($dependentId)) {
+                    $this->lifecycle->disable($dependentId);
+                }
+            }
             if ($this->lifecycle->isEnabled($extensionId)) {
                 $this->lifecycle->disable($extensionId);
             }
@@ -503,15 +626,9 @@ final class ExtensionInstaller
             $restored->save();
 
             $this->lifecycle->refresh();
-            if ($wasEnabled) {
-                if (! $this->lifecycle->enable($extensionId) || ! $this->lifecycle->isEnabled($extensionId)) {
-                    throw new ExtensionOperationFailed('Previous enabled state could not be restored.');
-                }
-            } elseif ($this->lifecycle->isEnabled($extensionId)) {
-                if (! $this->lifecycle->disable($extensionId)) {
-                    throw new ExtensionOperationFailed('Previous disabled state could not be restored.');
-                }
-            }
+            $this->restoreTargetState($snapshot, $operation);
+            $this->restoreDependentStates($snapshot, $operation);
+            $this->installed->reconcileFilesystem();
 
             return true;
         } catch (\Throwable $rollbackException) {
@@ -594,7 +711,6 @@ final class ExtensionInstaller
         ]);
     }
 
-
     private function azuriomVersion(): string
     {
         if (class_exists(\Azuriom\Azuriom::class) && method_exists(\Azuriom\Azuriom::class, 'version')) {
@@ -602,15 +718,6 @@ final class ExtensionInstaller
         }
 
         return (string) (defined('AZURIOM_VERSION') ? AZURIOM_VERSION : config('app.version', '1.2.0'));
-    }
-
-    private function coreVersion(): ?string
-    {
-        $version = InstalledExtension::query()
-            ->where('extension_id', 'gaming-hub-core')
-            ->value('installed_version');
-
-        return is_string($version) && $version !== '' ? $version : null;
     }
 
     private function workDirectory(ExtensionOperation $operation): string

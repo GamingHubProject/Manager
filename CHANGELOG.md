@@ -3,8 +3,8 @@
 ## 0.1.4 - 2026-08-07
 
 - Fixed immediate dependency resolution after installing Gaming Hub Core by reconciling filesystem-backed installed metadata before validating the next package.
-- Read the Core dependency version from persisted installed-package metadata instead of registry release data.
-- Added the Gaming Hub Core pre-1.0 compatibility rule required by Panel so installed Core `0.7.0` satisfies a `^0.6.0` Core requirement, while leaving Composer-compatible comparison behavior unchanged for PHP, Azuriom, and unrelated package dependencies.
+- Made the installed filesystem manifest version authoritative for dependency checks; Manager metadata is reconciled from that installed state and registry release metadata cannot satisfy dependencies.
+- Standardized all package dependency checks on normal Composer SemVer semantics with no Gaming Hub Core-specific widening. Under Composer semantics `^0.6.0` means `>=0.6.0 <0.7.0`, so Core `0.7.0` does not satisfy it; packages that support both Core 0.6.x and 0.7.x must declare an explicitly broader constraint such as `>=0.6.0 <0.8.0` or `^0.6.0 || ^0.7.0`.
 - Added detailed dependency-failure diagnostics with candidate package ID, requested dependency ID, installed package IDs and versions, constraint, installed version, and comparison result.
 - Added focused dependency-resolution tests covering immediate Core-to-Panel installation and comparator isolation.
 

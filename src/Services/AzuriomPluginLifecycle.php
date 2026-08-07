@@ -35,6 +35,21 @@ final class AzuriomPluginLifecycle
         return $this->callLifecycleCommand('plugin:disable', $extensionId);
     }
 
+    public function assertRequirementsSatisfied(string $extensionId): void
+    {
+        $manager = $this->manager();
+        if ($manager === null) {
+            return;
+        }
+
+        $missing = $manager->getMissingRequirements($extensionId);
+        if ($missing !== null) {
+            throw new ExtensionOperationFailed(
+                'Azuriom dependency validation failed for '.$extensionId.': missing or incompatible dependency '.$missing.'.',
+            );
+        }
+    }
+
     public function migrate(string $extensionId): void
     {
         $path = base_path('plugins/'.$extensionId.'/database/migrations');

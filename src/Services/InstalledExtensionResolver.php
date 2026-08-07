@@ -19,6 +19,8 @@ final class InstalledExtensionResolver
 
     public function reconcileFilesystem(): void
     {
+        // First invalidate Manager metadata that contradicts the filesystem or the
+        // canonical installed manifests.
         foreach (InstalledExtension::query()->get() as $record) {
             try {
                 $this->resolve($record->extension_id, true, false);
@@ -29,6 +31,8 @@ final class InstalledExtensionResolver
             }
         }
 
+        // Then discover every valid Azuriom plugin directory. A package does not
+        // have to have been installed by Manager in order to be installed.
         $entries = scandir($this->paths->pluginsRoot()) ?: [];
         foreach ($entries as $entry) {
             if ($entry === '.' || $entry === '..' || str_starts_with($entry, '.')) {
@@ -36,13 +40,7 @@ final class InstalledExtensionResolver
             }
 
             $path = $this->paths->pluginsRoot().DIRECTORY_SEPARATOR.$entry;
-            if (! is_dir($path)) {
-                continue;
-            }
-
-            $known = InstalledExtension::where('extension_id', $entry)->exists();
-            $hasManagerManifest = is_file($path.'/gaming-hub-extension.json');
-            if (! $known && ! $hasManagerManifest && ! str_starts_with($entry, 'gaming-hub-')) {
+            if (! is_dir($path) || ! is_file($path.'/plugin.json')) {
                 continue;
             }
 
@@ -82,6 +80,7 @@ final class InstalledExtensionResolver
             is_file($path.'/gaming-hub-extension.json'),
         );
         $values = [
+            // Installed version and identity always come from the physical package.
             'installed_version' => $manifest->version,
             'enabled_snapshot' => $this->lifecycle->isEnabled($extensionId),
             'manifest_snapshot' => $snapshot,
@@ -117,6 +116,9 @@ final class InstalledExtensionResolver
             return $normalized;
         }
 
+        // A registry may supply Gaming Hub dependency metadata for a legacy package
+        // that has only plugin.json. This metadata is lifecycle context, not evidence
+        // of installation, identity, or installed version.
         foreach (['requires', 'provides', 'consumes', 'type', 'repository', 'homepage', 'public_attribution_label'] as $key) {
             if (array_key_exists($key, $existing)) {
                 $normalized[$key] = $existing[$key];
@@ -147,7 +149,9 @@ final class InstalledExtensionResolver
             $expectedId === 'gaming-hub-manager',
         );
         if ($normalized->id !== $expectedId || $normalized->pluginDirectory !== $expectedId) {
-            throw new ExtensionOperationFailed('Installed package ID does not match its directory.');
+            throw new ExtensionOperationFailed(
+                'Package identity mismatch: Installed package ID does not match its directory exactly.',
+            );
         }
 
         return $normalized;
