@@ -2,11 +2,11 @@
   "schema": 1,
   "id": "gaming-hub-manager",
   "name": "Gaming Hub Manager",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "type": "utility",
   "description": "Standalone lifecycle manager for Gaming Hub packages.",
   "author": "Gaming Hub",
-  "repository": "https://github.com/GamingHubProject/gaming-hub-manager",
+  "repository": "https://github.com/GamingHubProject/Manager",
   "requires": {
     "azuriom": ">=1.2.0",
     "php": ">=8.2",

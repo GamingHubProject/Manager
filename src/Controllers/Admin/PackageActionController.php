@@ -153,9 +153,14 @@ final class PackageActionController extends Controller
                 'last_operation_result' => $status,
             ])->save();
             $operation->mergeContext(['expected_hash' => $expected, 'actual_hash' => $actual]);
-            $operation->complete($status === 'verified'
-                ? 'Package integrity verified.'
-                : 'Package files differ from the recorded integrity baseline.');
+            if ($status === 'verified') {
+                $operation->complete('Package integrity verified.');
+            } else {
+                $operation->fail(
+                    'Package files differ from the recorded integrity baseline.',
+                    'integrity_verification_failed',
+                );
+            }
 
             return back()->with($status === 'verified' ? 'success' : 'warning',
                 $status === 'verified' ? 'Package integrity verified.' : 'Package files have changed since installation.');

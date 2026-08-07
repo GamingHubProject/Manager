@@ -33,7 +33,7 @@ final class BackupController extends Controller
 
         $operation = ExtensionOperation::create([
             'operation_uuid' => (string) Str::uuid(),
-            'operation' => 'rollback',
+            'operation' => 'restore',
             'extension_id' => $backupModel->extension_id,
             'version' => $backupModel->version,
             'actor_id' => $request->user()->getKey(),
@@ -44,7 +44,7 @@ final class BackupController extends Controller
                 'at' => now()->toIso8601String(),
                 'stage' => 'queued',
                 'level' => 'info',
-                'message' => 'Backup rollback queued.',
+                'message' => 'Backup restore queued.',
             ]],
         ]);
 
@@ -55,11 +55,11 @@ final class BackupController extends Controller
                 ->with('warning', 'Package files restored to '.$backupModel->version.'. Database migrations were not reversed.');
         } catch (\Throwable $exception) {
             if ($operation->result === 'running' && $operation->finished_at === null) {
-                $operation->fail($this->messages->fromThrowable($exception), 'rollback_failed');
+                $operation->fail($this->messages->fromThrowable($exception), 'restore_failed');
             }
 
             return redirect()->route('gaming-hub-manager.admin.logs')
-                ->with('error', 'Rollback failed: '.$this->messages->fromThrowable($exception));
+                ->with('error', 'Restore failed: '.$this->messages->fromThrowable($exception));
         }
     }
 

@@ -150,8 +150,8 @@ for controller in (ROOT / "src/Controllers/Admin").glob("*.php"):
 
 plugin = json.loads((ROOT / "plugin.json").read_text(encoding="utf-8"))
 manifest = json.loads((ROOT / "gaming-hub-extension.json").read_text(encoding="utf-8"))
-require(plugin.get("version") == "0.1.4", "plugin version is not 0.1.4")
-require(manifest.get("version") == "0.1.4", "manifest version is not 0.1.4")
+require(plugin.get("version") == "0.1.5", "plugin version is not 0.1.5")
+require(manifest.get("version") == "0.1.5", "manifest version is not 0.1.5")
 
 if errors:
     print("FAILED")

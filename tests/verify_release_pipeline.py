@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Static integration contracts for v0.1.4 release discovery and checksum flow."""
+"""Static integration contracts for v0.1.5 release discovery and checksum flow."""
 from __future__ import annotations
 
 import json
@@ -117,8 +117,8 @@ for path in new_services:
 
 plugin = json.loads((ROOT / "plugin.json").read_text(encoding="utf-8"))
 manifest = json.loads((ROOT / "gaming-hub-extension.json").read_text(encoding="utf-8"))
-require(plugin.get("version") == "0.1.4", "plugin version is not 0.1.4")
-require(manifest.get("version") == "0.1.4", "package manifest version is not 0.1.4")
+require(plugin.get("version") == "0.1.5", "plugin version is not 0.1.5")
+require(manifest.get("version") == "0.1.5", "package manifest version is not 0.1.5")
 
 if failures:
     print("FAILED")

@@ -1,16 +1,18 @@
-# Upgrade to 0.1.4
+# Upgrade to 0.1.5
+
+Gaming Hub Manager 0.1.5 finalizes M0.4 database resilience and M0.5 package-lifecycle verification without adding a new Manager database migration.
 
 1. Back up the Azuriom database, `plugins/gaming-hub-manager`, and `storage/app/gaming-hub-manager`.
 2. Disable Gaming Hub Manager from **Administration → Extensions → Plugins**.
-This release fixes dependency resolution after installing Gaming Hub Core; no registry or database schema changes are required.
-
-3. Replace only the `plugins/gaming-hub-manager` directory with the directory from the 0.1.4 ZIP.
+3. Replace only the `plugins/gaming-hub-manager` directory with the directory from `gaming-hub-manager-v0.1.5.zip`.
 4. Re-enable Gaming Hub Manager.
-5. Run the existing Manager migrations. Version 0.1.4 adds no new migration, but this repairs installations where one or more Manager tables were never created or were removed:
+5. Run the normal Azuriom migrations:
 
    ```bash
    php artisan migrate --force
    ```
+
+   Version 0.1.5 does not add a new Manager migration. If migration history says a Manager migration already ran while its physical table is missing, Manager intentionally reports `SCHEMA_INCONSISTENT` instead of rewriting migration history or recreating tables automatically.
 
 6. Clear application and plugin caches:
 
@@ -19,14 +21,17 @@ This release fixes dependency resolution after installing Gaming Hub Core; no re
    php artisan plugin:cache
    ```
 
-7. Open **Registries**. The protected default must be named **GamingHubProject Official Registry** and use:
+7. Open **Gaming Hub Manager → Overview** and confirm schema health is `READY`.
+8. Open **Registries** and confirm exactly one protected **GamingHubProject Official Registry** using:
 
    ```text
    https://raw.githubusercontent.com/GamingHubProject/Registry/main/registry.json
    ```
 
-8. Confirm that no legacy Core source was created unless actual non-empty Core installer metadata exists.
-9. Open **Installed Packages**. Every listed package must have a matching plugin directory with a valid `plugin.json`; stale rows are removed during normal reconciliation.
-10. Refresh the official registry to invalidate cached registry and GitHub release metadata.
+9. Confirm the official catalog contains the current packages:
+   - `gaming-hub-core` → `https://github.com/GamingHubProject/Core`
+   - `gaming-hub-panel` → `https://github.com/GamingHubProject/Panel`
+10. Open **Installed Packages**. Filesystem manifests remain authoritative; valid manual installations are discovered and stale Manager rows are reconciled.
+11. For a disposable test environment, verify Core → Panel consecutive installation, dependency protection, reinstall/update rollback, backup restore, and uninstall before rolling the release into production.
 
-Existing user-created custom registries are not rewritten. Gaming Hub Core and Gaming Hub Panel are not modified by this upgrade.
+Existing administrator-created custom registries are preserved. Gaming Hub Core, Gaming Hub Panel, and Azuriom core are not modified by this Manager upgrade.

@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.5 - 2026-08-07
+
+- Finalized Manager database resilience with explicit READY, MIGRATIONS_PENDING, SCHEMA_INCONSISTENT, and DATABASE_UNAVAILABLE states while keeping physical table state authoritative.
+- Added lifecycle verification coverage for filesystem identity, manual-package version observation, integrity/checksum behavior, dependency ordering, restore contracts, and release consistency.
+- Hardened backup restore so the backed-up version is dependency-checked before file mutation, enabled dependents are temporarily disabled/restored in dependency-safe order, and legacy plugin.json-only dependency contracts remain enforced.
+- Added immediate filesystem-authoritative reconciliation after backup restore and uninstall.
+- Changed user-triggered backup recovery operation logs from `rollback` to `restore`, keeping automatic failure rollback distinct.
+- Integrity verification now records changed package files as a failed verification operation instead of a successful operation.
+- Bumped Manager release metadata to 0.1.5 and corrected its repository metadata to `https://github.com/GamingHubProject/Manager`.
+
 ## 0.1.4 - 2026-08-07
 
 - Added M0.4 Manager database resilience with explicit `READY`, `MIGRATIONS_PENDING`, `SCHEMA_INCONSISTENT`, and `DATABASE_UNAVAILABLE` schema-health states.

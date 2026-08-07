@@ -15,6 +15,7 @@ final class ExtensionUninstaller
         private AzuriomPluginLifecycle $lifecycle,
         private ExtensionSafeMessage $messages,
         private BackupManager $backups,
+        private InstalledExtensionResolver $installed,
     ) {
     }
 
@@ -109,6 +110,7 @@ final class ExtensionUninstaller
                 $operation->save();
             }
 
+            $this->installed->reconcileFilesystem();
             $operation->complete('Package files removed. Package database data was retained and a recovery backup was preserved.');
         } catch (\Throwable $exception) {
             $operation->mergeContext(['failed_stage' => $operation->current_stage ?: 'unknown']);
@@ -145,6 +147,13 @@ final class ExtensionUninstaller
                 } catch (\Throwable) {
                     $rollbackSucceeded = false;
                 }
+            }
+
+            try {
+                $this->lifecycle->refresh();
+                $this->installed->reconcileFilesystem();
+            } catch (\Throwable) {
+                $rollbackSucceeded = false;
             }
 
             $rollbackAttempted = $filesMoved || $disabled || $metadataDeleted;

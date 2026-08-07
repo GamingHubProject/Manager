@@ -1,6 +1,6 @@
 # Files
 
-Gaming Hub Manager 0.1.4 contains 108 files. No file in Gaming Hub Core, Gaming Hub Panel, or Azuriom core is changed.
+Gaming Hub Manager 0.1.5 contains 119 files. No file in Gaming Hub Core, Gaming Hub Panel, or Azuriom core is changed.
 
 ```text
 CHANGELOG.md
@@ -26,9 +26,9 @@ docs/REGISTRY_SCHEMA.md
 docs/VIEW_CONTRACTS.md
 examples/SHA256SUMS
 examples/gaming-hub-extension.json
-install_Azuriom.md
 examples/registry.json
 gaming-hub-extension.json
+install_Azuriom.md
 plugin.json
 resources/lang/en/admin.php
 resources/registry/official.json
@@ -45,8 +45,8 @@ resources/views/admin/registries.blade.php
 resources/views/admin/release.blade.php
 resources/views/admin/settings.blade.php
 resources/views/admin/uninstall.blade.php
-scripts/install.sh
 routes/admin.php
+scripts/install.sh
 src/Controllers/Admin/BackupController.php
 src/Controllers/Admin/DashboardController.php
 src/Controllers/Admin/PackageActionController.php
@@ -93,6 +93,7 @@ src/Services/GitHubAssetDigestValidator.php
 src/Services/GitHubReleaseClient.php
 src/Services/InstalledExtensionResolver.php
 src/Services/LegacyMetadataImporter.php
+src/Services/LegacyRegistryPolicy.php
 src/Services/ManagerRuntime.php
 src/Services/ManagerSchema.php
 src/Services/ManagerSettings.php
@@ -104,10 +105,20 @@ src/Services/SafeExtensionHttpClient.php
 src/Support/ManagerAlertNormalizer.php
 tests/run-alert-normalizer.php
 tests/run-dependency-resolution.php
+tests/run-m02-dependency-graph.php
+tests/run-m03-registry-policy.php
+tests/run-m04-runtime-guard.php
+tests/run-m04-schema-exception-policy.php
+tests/run-m04-schema-health.php
+tests/run-m05-filesystem-lifecycle.php
 tests/run-manifest-inspection.php
 tests/run-release-security.php
 tests/verify_clean_install.py
 tests/verify_dependency_resolution.py
+tests/verify_m02_package_state.py
+tests/verify_m03_registry_cleanup.py
+tests/verify_m04_database_resilience.py
+tests/verify_m05_lifecycle.py
 tests/verify_package.py
 tests/verify_release_pipeline.py
 tests/verify_view_contract.py

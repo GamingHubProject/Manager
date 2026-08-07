@@ -1,6 +1,44 @@
-# Verification
+# Verification — Gaming Hub Manager 0.1.5
 
-M0.4 database resilience implemented on 2026-08-07 against Gaming Hub Manager 0.1.4 M0.3 Finalized.
+Gaming Hub Manager 0.1.5 finalizes M0.4 database resilience and adds M0.5 package-lifecycle verification. Milestone labels are development labels only; the installable plugin version is exactly `0.1.5`.
+
+## M0.5 release gate
+
+Run from the plugin root:
+
+```bash
+php tests/run-m05-filesystem-lifecycle.php
+python3 tests/verify_m05_lifecycle.py
+php tests/run-m04-schema-health.php
+php tests/run-m04-schema-exception-policy.php
+php tests/run-m04-runtime-guard.php
+python3 tests/verify_m04_database_resilience.py
+php tests/run-m03-registry-policy.php
+python3 tests/verify_m03_registry_cleanup.py
+python3 tests/verify_clean_install.py
+php tests/run-manifest-inspection.php
+php tests/run-m02-dependency-graph.php
+python3 tests/verify_m02_package_state.py
+python3 tests/verify_dependency_resolution.py
+python3 tests/verify_package.py
+python3 tests/verify_release_pipeline.py
+python3 tests/verify_view_contract.py
+php tests/run-release-security.php
+php tests/run-alert-normalizer.php
+php tests/run-dependency-resolution.php
+```
+
+`tests/run-dependency-resolution.php` requires the real Composer `composer/semver` autoloader. In a standalone source workspace without Composer dependencies it must report `SKIP`, not `PASS`.
+
+The standalone M0.5 behavioral harness executes production filesystem/manifest/integrity/release primitives and restore ordering. Full install/update/reinstall/enable/disable/backup/uninstall transactions require an Azuriom/Laravel/Eloquent runtime and must not be reported as runtime-passed unless they were actually executed.
+
+## Real Azuriom lifecycle verification
+
+In a disposable Azuriom v1.2.x installation, verify Manager 0.1.5 schema health, the controlled missing-operations-table recovery state, Panel-without-Core rejection, Core then immediate Panel installation, dependency protection, enable/disable, reinstall, update, backup/restore, uninstall, and persistence after application/container restart. Do not perform missing-table tests against production data.
+
+---
+
+## Retained M0.4 verification notes
 
 ## M0.4 database resilience contracts
 
