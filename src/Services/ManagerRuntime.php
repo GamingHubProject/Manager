@@ -7,9 +7,10 @@ use Azuriom\Plugin\GamingHubManager\Models\ExtensionOperation;
 final class ManagerRuntime
 {
     private bool $prepared = false;
-    private array $legacySummary = [];
+    private array $runtimeSummary = [];
 
     public function __construct(
+        private ManagerSchema $schema,
         private ManagerSettings $settings,
         private ExtensionSourceManager $sources,
         private LegacyMetadataImporter $legacy,
@@ -18,22 +19,57 @@ final class ManagerRuntime
     ) {
     }
 
+    /**
+     * @return array{
+     *     schema_ready: bool,
+     *     database_available: bool,
+     *     missing_tables: list<string>,
+     *     sources: int,
+     *     packages: int,
+     *     operations: int,
+     *     backups: int,
+     *     warnings: list<string>,
+     *     disabled?: bool,
+     *     detected?: bool,
+     *     throttled?: bool,
+     *     last_run?: string
+     * }
+     */
     public function prepare(): array
     {
         if ($this->prepared) {
-            return $this->legacySummary;
+            return $this->runtimeSummary;
         }
         $this->prepared = true;
+
+        $status = $this->schema->status(true);
+        $empty = [
+            'sources' => 0,
+            'packages' => 0,
+            'operations' => 0,
+            'backups' => 0,
+            'warnings' => [],
+        ];
+        if (! $status['schema_ready']) {
+            return $this->runtimeSummary = [...$status, ...$empty];
+        }
 
         $this->settings->applyToConfig();
         $this->closeInterruptedOperations();
         $this->sources->ensureOfficial();
-        $this->legacySummary = $this->legacy->import();
+        $legacy = $this->legacy->import();
         $this->installed->reconcileFilesystem();
         $this->cleanupStaging();
         $this->pruneLogs();
 
-        return $this->legacySummary;
+        return $this->runtimeSummary = [...$status, ...$legacy];
+    }
+
+    public function isReady(?array $summary = null): bool
+    {
+        $summary ??= $this->prepare();
+
+        return (bool) ($summary['schema_ready'] ?? false);
     }
 
     private function closeInterruptedOperations(): void

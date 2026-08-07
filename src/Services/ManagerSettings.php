@@ -3,7 +3,6 @@
 namespace Azuriom\Plugin\GamingHubManager\Services;
 
 use Azuriom\Plugin\GamingHubManager\Models\ManagerSetting;
-use Illuminate\Support\Facades\Schema;
 
 final class ManagerSettings
 {
@@ -14,6 +13,10 @@ final class ManagerSettings
         'stale_staging_hours' => ['type' => 'int', 'config' => 'stale_staging_hours', 'min' => 1, 'max' => 168],
         'operation_log_retention_days' => ['type' => 'int', 'config' => 'operation_log_retention_days', 'min' => 7, 'max' => 3650],
     ];
+
+    public function __construct(private ManagerSchema $schema)
+    {
+    }
 
     public function all(): array
     {
@@ -49,6 +52,10 @@ final class ManagerSettings
 
     public function update(array $values): void
     {
+        if (! $this->tableExists()) {
+            return;
+        }
+
         foreach (self::DEFINITIONS as $key => $definition) {
             if (! array_key_exists($key, $values)) {
                 continue;
@@ -69,29 +76,35 @@ final class ManagerSettings
         }
     }
 
-
-    public function getInternal(string $key): ?string
+    public function getInternal(string $key): mixed
     {
         if (! $this->tableExists()) {
             return null;
         }
 
-        return ManagerSetting::query()->find($key)?->value;
+        $stored = ManagerSetting::query()->find($key)?->value;
+        if (! is_string($stored)) {
+            return $stored;
+        }
+
+        $decoded = json_decode($stored, true);
+
+        return json_last_error() === JSON_ERROR_NONE ? $decoded : $stored;
     }
 
     public function putInternal(string $key, mixed $value): void
     {
         if ($this->tableExists()) {
-            ManagerSetting::query()->updateOrCreate(['key' => $key], ['value' => is_scalar($value) ? (string) $value : json_encode($value)]);
+            ManagerSetting::query()->updateOrCreate([
+                'key' => $key,
+            ], [
+                'value' => is_scalar($value) ? (string) $value : json_encode($value),
+            ]);
         }
     }
 
     private function tableExists(): bool
     {
-        try {
-            return Schema::hasTable('gaminghub_manager_settings');
-        } catch (\Throwable) {
-            return false;
-        }
+        return $this->schema->tableExists('gaminghub_manager_settings');
     }
 }

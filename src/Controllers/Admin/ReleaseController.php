@@ -19,16 +19,20 @@ final class ReleaseController extends Controller
     ) {
     }
 
-    public function show(ExtensionSource $source, string $packageId): View|RedirectResponse
+    public function show(string $source, string $packageId): View|RedirectResponse
     {
-        $this->runtime->prepare();
-        abort_unless($source->enabled, 404);
+        $runtimeStatus = $this->runtime->prepare();
+        if (! $this->runtime->isReady($runtimeStatus)) {
+            return view('gaming-hub-manager::admin.migration-required', compact('runtimeStatus'));
+        }
+        $sourceModel = ExtensionSource::query()->findOrFail($source);
+        abort_unless($sourceModel->enabled, 404);
 
         try {
-            $resolved = $this->releases->resolve($source, $packageId);
+            $resolved = $this->releases->resolve($sourceModel, $packageId);
 
             return view('gaming-hub-manager::admin.release', [
-                'source' => $source,
+                'source' => $sourceModel,
                 'packageId' => $packageId,
                 ...$resolved,
             ]);

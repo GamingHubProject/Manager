@@ -21,18 +21,21 @@ final class BackupController extends Controller
     ) {
     }
 
-    public function restore(Request $request, PackageBackup $backup): RedirectResponse
+    public function restore(Request $request, string $backup): RedirectResponse
     {
-        $this->runtime->prepare();
+        if ($notReady = $this->notReady()) {
+            return $notReady;
+        }
+        $backupModel = PackageBackup::query()->findOrFail($backup);
         $request->validate([
-            'confirmation' => ['required', 'string', 'in:'.$backup->extension_id],
+            'confirmation' => ['required', 'string', 'in:'.$backupModel->extension_id],
         ], ['confirmation.in' => 'Type the exact package ID to confirm rollback.']);
 
         $operation = ExtensionOperation::create([
             'operation_uuid' => (string) Str::uuid(),
             'operation' => 'rollback',
-            'extension_id' => $backup->extension_id,
-            'version' => $backup->version,
+            'extension_id' => $backupModel->extension_id,
+            'version' => $backupModel->version,
             'actor_id' => $request->user()->getKey(),
             'started_at' => now(),
             'result' => 'running',
@@ -46,10 +49,10 @@ final class BackupController extends Controller
         ]);
 
         try {
-            $package = $this->backups->restore($backup, (int) $request->user()->getKey(), $operation);
+            $package = $this->backups->restore($backupModel, (int) $request->user()->getKey(), $operation);
 
             return redirect()->route('gaming-hub-manager.admin.packages.show', $package)
-                ->with('warning', 'Package files restored to '.$backup->version.'. Database migrations were not reversed.');
+                ->with('warning', 'Package files restored to '.$backupModel->version.'. Database migrations were not reversed.');
         } catch (\Throwable $exception) {
             if ($operation->result === 'running' && $operation->finished_at === null) {
                 $operation->fail($this->messages->fromThrowable($exception), 'rollback_failed');
@@ -60,16 +63,30 @@ final class BackupController extends Controller
         }
     }
 
-    public function destroy(Request $request, PackageBackup $backup): RedirectResponse
+    public function destroy(Request $request, string $backup): RedirectResponse
     {
-        $this->runtime->prepare();
-        $request->validate(['confirmation' => ['required', 'string', 'in:'.$backup->backup_uuid]]);
+        if ($notReady = $this->notReady()) {
+            return $notReady;
+        }
+        $backupModel = PackageBackup::query()->findOrFail($backup);
+        $request->validate(['confirmation' => ['required', 'string', 'in:'.$backupModel->backup_uuid]]);
         try {
-            $this->backups->delete($backup);
+            $this->backups->delete($backupModel);
 
             return back()->with('success', 'Backup deleted.');
         } catch (\Throwable $exception) {
             return back()->with('error', $this->messages->fromThrowable($exception));
         }
+    }
+
+    private function notReady(): ?RedirectResponse
+    {
+        $runtimeStatus = $this->runtime->prepare();
+        if ($this->runtime->isReady($runtimeStatus)) {
+            return null;
+        }
+
+        return redirect()->route('gaming-hub-manager.admin.overview')
+            ->with('warning', 'Run the pending Gaming Hub Manager migrations before managing backups.');
     }
 }

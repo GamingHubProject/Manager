@@ -82,7 +82,7 @@ require("snapshotWithLegacyAlerts" in dashboard and "$snapshot['managerAlerts'][
 require("'warnings' => []" in legacy and "legacy['warnings']" in dashboard, "legacy import warnings are not separated from validation errors")
 require("legacy_import_last_summary" in legacy and "$summary['warnings'][]" in legacy, "throttled legacy warnings are not retained safely")
 for table in ("gaminghub_extension_sources", "gaminghub_installed_extensions", "gaminghub_extension_operations"):
-    require(f"Schema::hasTable('{table}')" in legacy, f"legacy importer does not safely guard missing {table}")
+    require(f"$this->schema->tableExists('{table}')" in legacy, f"legacy importer does not safely guard missing {table}")
 require("stale legacy record skipped" in legacy, "stale legacy package metadata does not produce a safe warning")
 require("requiredPackageId" in legacy and "catch (\\Throwable $exception)" in legacy, "malformed legacy records are not isolated")
 

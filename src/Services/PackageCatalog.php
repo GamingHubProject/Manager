@@ -13,6 +13,8 @@ final class PackageCatalog
         private GitHubReleaseClient $github,
         private ExtensionVersionPolicy $versions,
         private ExtensionSafeMessage $messages,
+        private InstalledExtensionResolver $installedResolver,
+        private ManagerSchema $schema,
     ) {
     }
 
@@ -27,6 +29,23 @@ final class PackageCatalog
      */
     public function snapshot(bool $force = false): array
     {
+        $status = $this->schema->status();
+        if (! $status['schema_ready']) {
+            return [
+                'sources' => collect(),
+                'installed' => collect(),
+                'items' => [],
+                'updates' => [],
+                'managerAlerts' => [[
+                    'level' => 'warning',
+                    'label' => 'Migrations required',
+                    'message' => 'Gaming Hub Manager package metadata is unavailable until its migrations are complete.',
+                ]],
+            ];
+        }
+
+        $this->installedResolver->reconcileFilesystem();
+
         $sources = ExtensionSource::query()
             ->orderByRaw("CASE WHEN type = 'official' THEN 0 WHEN type = 'registry' THEN 1 ELSE 2 END")
             ->orderBy('name')

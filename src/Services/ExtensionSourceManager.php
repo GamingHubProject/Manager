@@ -17,29 +17,58 @@ final class ExtensionSourceManager
     ) {
     }
 
+    public const OFFICIAL_SOURCE_ID = 'gaminghubproject-official';
+    public const OFFICIAL_NAME = 'GamingHubProject Official Registry';
+
     public function ensureOfficial(): ExtensionSource
     {
-        $source = ExtensionSource::firstOrCreate(['source_id' => 'rosesofdorns-official'], [
+        $source = ExtensionSource::query()
+            ->where('source_id', self::OFFICIAL_SOURCE_ID)
+            ->where('type', 'official')
+            ->first()
+            ?? ExtensionSource::query()->where('type', 'official')->orderBy('id')->first();
+
+        if ($source === null) {
+            $source = new ExtensionSource();
+        }
+
+        $sourceIdInUse = ExtensionSource::query()
+            ->where('source_id', self::OFFICIAL_SOURCE_ID)
+            ->when($source->exists, fn ($query) => $query->where($source->getKeyName(), '!=', $source->getKey()))
+            ->exists();
+
+        $values = [
             'type' => 'official',
-            'name' => 'RosesOfDorns official registry',
+            'name' => self::OFFICIAL_NAME,
             'url' => (string) config('gaming-hub-manager.manager.official_registry_url'),
             'trust_level' => 'official',
             'trusted' => true,
             'enabled' => true,
-        ]);
-
-        $expectedUrl = (string) config('gaming-hub-manager.manager.official_registry_url');
-        if ($source->url !== $expectedUrl || ! $source->trusted || ! $source->enabled) {
-            $source->forceFill([
-                'url' => $expectedUrl,
-                'type' => 'official',
-                'trust_level' => 'official',
-                'trusted' => true,
-                'enabled' => true,
-            ])->save();
+        ];
+        if (! $sourceIdInUse) {
+            $values['source_id'] = self::OFFICIAL_SOURCE_ID;
+        } elseif (! $source->exists) {
+            $values['source_id'] = $this->availableOfficialSourceId();
         }
 
+        $source->forceFill($values)->save();
+
+        ExtensionSource::query()
+            ->where('type', 'official')
+            ->where($source->getKeyName(), '!=', $source->getKey())
+            ->delete();
+
         return $source;
+    }
+
+    private function availableOfficialSourceId(): string
+    {
+        $suffix = 1;
+        do {
+            $candidate = self::OFFICIAL_SOURCE_ID.'-managed-'.$suffix++;
+        } while (ExtensionSource::query()->where('source_id', $candidate)->exists());
+
+        return $candidate;
     }
 
     public function refresh(ExtensionSource $source, bool $force = false): array

@@ -25,7 +25,7 @@ Manager has no class, service-provider, route, database, or container dependency
 ## Components
 
 - `ExtensionSourceManager`: official/custom registry cache and coordinated GitHub release-cache invalidation.
-- `PackageCatalog`: merges enabled sources with installed package records; selected GitHub release tags provide available versions while deprecated registry hints are fallback-only.
+- `PackageCatalog`: reconciles the filesystem before merging enabled sources with installed package records; selected GitHub release tags provide available versions while deprecated registry hints are fallback-only.
 - `GitHubReleaseClient`: selects the highest semantic published release with a matching uploaded ZIP asset and enforces stable/prerelease policy.
 - `PackageReleaseResolver`: resolves the exact GitHub release/asset and checksum source in explicit-file → GitHub asset digest → exact registry pin order.
 - `GitHubAssetDigestValidator` / `RegistryChecksumResolver`: validate exact selected-asset checksum bindings.
@@ -36,10 +36,11 @@ Manager has no class, service-provider, route, database, or container dependency
 - `ExtensionInstaller`: transactional install/update/reinstall with same-filesystem swaps and automatic file rollback.
 - `ExtensionUninstaller`: dependency-safe file uninstall with a verified recovery backup and retained data.
 - `BackupManager`: manual/pre-update/pre-uninstall/pre-rollback backups and verified restoration.
-- `InstalledExtensionResolver`: discovers existing Gaming Hub packages, including Manager's own installed presence, and reconciles metadata. Manager self-modification remains blocked.
-- `LegacyMetadataImporter`: idempotent, non-destructive bridge from Core's old installer records.
+- `InstalledExtensionResolver`: makes package directories and valid `plugin.json` manifests authoritative, removes stale installed rows, discovers existing Gaming Hub packages including Manager's own installed presence, and reconciles supplemental metadata. Manager self-modification remains blocked.
+- `LegacyMetadataImporter`: idempotent, non-destructive bridge that runs only after non-empty legitimate Core installer metadata or a validated legacy backup is detected.
 - `DirectoryHasher`: deterministic integrity baseline over package files.
-- `ManagerRuntime`: one-request preparation, interrupted-operation closure, reconciliation, staging cleanup, and log retention.
+- `ManagerSchema`: checks database availability and all five Manager tables, including PostgreSQL missing-table handling, without suppressing unrelated schema exceptions.
+- `ManagerRuntime`: schema-gated one-request preparation, interrupted-operation closure, official-source bootstrap, reconciliation, staging cleanup, and log retention.
 
 ## Persistence
 
@@ -70,6 +71,10 @@ Dependency guard → verified backup → disable → guarded directory move → 
 
 Verify backup hash/manifest → create current-state recovery backup → stage backup → disable current package → atomic replacement → restore captured enabled state → update Manager metadata. Database migrations are not reversed.
 
+
+## Migration readiness boundary
+
+Every Manager administration entry checks `ManagerSchema` before querying Manager models. When the connection or schema is incomplete, runtime preparation is skipped and the administration renders a migration-required warning. Route parameters are resolved only after this check, preventing implicit model binding from querying absent tables.
 
 ## Admin view boundary
 

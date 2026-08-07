@@ -39,9 +39,12 @@ final class PackageActionController extends Controller
     ) {
     }
 
-    public function install(Request $request, ExtensionSource $source): RedirectResponse
+    public function install(Request $request, string $source): RedirectResponse
     {
-        $this->runtime->prepare();
+        if ($notReady = $this->notReady()) {
+            return $notReady;
+        }
+        $source = ExtensionSource::query()->findOrFail($source);
         $data = $request->validate([
             'extension_id' => ['required', 'string', 'max:100'],
             'enable' => ['sometimes', 'boolean'],
@@ -74,23 +77,39 @@ final class PackageActionController extends Controller
         }
     }
 
-    public function update(Request $request, InstalledExtension $extension): RedirectResponse
+    public function update(Request $request, string $extension): RedirectResponse
     {
-        return $this->replace($request, $extension, false);
+        if ($notReady = $this->notReady()) {
+            return $notReady;
+        }
+
+        return $this->replace($request, InstalledExtension::query()->findOrFail($extension), false);
     }
 
-    public function reinstall(Request $request, InstalledExtension $extension): RedirectResponse
+    public function reinstall(Request $request, string $extension): RedirectResponse
     {
-        return $this->replace($request, $extension, true);
+        if ($notReady = $this->notReady()) {
+            return $notReady;
+        }
+
+        return $this->replace($request, InstalledExtension::query()->findOrFail($extension), true);
     }
 
-    public function enable(Request $request, InstalledExtension $extension): RedirectResponse
+    public function enable(Request $request, string $extension): RedirectResponse
     {
-        return $this->changeLifecycle($request, $extension, true);
+        if ($notReady = $this->notReady()) {
+            return $notReady;
+        }
+
+        return $this->changeLifecycle($request, InstalledExtension::query()->findOrFail($extension), true);
     }
 
-    public function disable(Request $request, InstalledExtension $extension): RedirectResponse
+    public function disable(Request $request, string $extension): RedirectResponse
     {
+        if ($notReady = $this->notReady()) {
+            return $notReady;
+        }
+        $extension = InstalledExtension::query()->findOrFail($extension);
         if ($protected = $this->protectedPackage($extension, 'disable')) {
             return $protected;
         }
@@ -103,9 +122,12 @@ final class PackageActionController extends Controller
         return $this->changeLifecycle($request, $extension, false);
     }
 
-    public function verify(Request $request, InstalledExtension $extension): RedirectResponse
+    public function verify(Request $request, string $extension): RedirectResponse
     {
-        $this->runtime->prepare();
+        if ($notReady = $this->notReady()) {
+            return $notReady;
+        }
+        $extension = InstalledExtension::query()->findOrFail($extension);
         $operation = $this->newOperation('verify', null, $request, $extension->extension_id);
         $lock = Cache::lock('gaminghub-manager:package-operation:'.$extension->extension_id, 120);
         $locked = false;
@@ -142,13 +164,16 @@ final class PackageActionController extends Controller
         }
     }
 
-    public function backup(Request $request, InstalledExtension $extension): RedirectResponse
+    public function backup(Request $request, string $extension): RedirectResponse
     {
+        if ($notReady = $this->notReady()) {
+            return $notReady;
+        }
+        $extension = InstalledExtension::query()->findOrFail($extension);
         if ($protected = $this->protectedPackage($extension, 'back up')) {
             return $protected;
         }
 
-        $this->runtime->prepare();
         $operation = $this->newOperation('backup', null, $request, $extension->extension_id);
         try {
             $backup = $this->backups->create($extension, (int) $request->user()->getKey(), $operation);
@@ -166,7 +191,6 @@ final class PackageActionController extends Controller
             return $protected;
         }
 
-        $this->runtime->prepare();
         $request->validate([
             'source_id' => ['nullable', 'integer', 'exists:gaminghub_manager_sources,id'],
             'confirm_unverified' => ['sometimes', 'accepted'],
@@ -215,7 +239,6 @@ final class PackageActionController extends Controller
             return $protected;
         }
 
-        $this->runtime->prepare();
         $operation = $this->newOperation($enable ? 'enable' : 'disable', null, $request, $extension->extension_id);
         $lock = Cache::lock('gaminghub-manager:package-operation:'.$extension->extension_id, 120);
         $locked = false;
@@ -242,6 +265,17 @@ final class PackageActionController extends Controller
                 $lock->release();
             }
         }
+    }
+
+    private function notReady(): ?RedirectResponse
+    {
+        $runtimeStatus = $this->runtime->prepare();
+        if ($this->runtime->isReady($runtimeStatus)) {
+            return null;
+        }
+
+        return redirect()->route('gaming-hub-manager.admin.overview')
+            ->with('warning', 'Run the pending Gaming Hub Manager migrations before managing packages.');
     }
 
     private function sourceError(Request $request, ExtensionSource $source, string $action): ?RedirectResponse

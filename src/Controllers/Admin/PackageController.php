@@ -29,47 +29,59 @@ final class PackageController extends Controller
     ) {
     }
 
-    public function show(InstalledExtension $extension): View
+    public function show(string $extension): View|RedirectResponse
     {
-        $this->runtime->prepare();
-        $extension = $extension->fresh();
-        $protectedPackage = $extension->extension_id === 'gaming-hub-manager';
+        $runtimeStatus = $this->runtime->prepare();
+        if (! $this->runtime->isReady($runtimeStatus)) {
+            return view('gaming-hub-manager::admin.migration-required', compact('runtimeStatus'));
+        }
+        $extensionModel = InstalledExtension::query()->findOrFail($extension);
+        $protectedPackage = $extensionModel->extension_id === 'gaming-hub-manager';
 
         return view('gaming-hub-manager::admin.package', [
-            'extension' => $extension,
-            'enabled' => $this->lifecycle->isEnabled($extension->extension_id),
-            'dependents' => $this->dependencies->dependentsOf($extension->extension_id),
-            'catalogItem' => $protectedPackage ? null : $this->catalog->findForPackage($extension->extension_id),
+            'extension' => $extensionModel,
+            'enabled' => $this->lifecycle->isEnabled($extensionModel->extension_id),
+            'dependents' => $this->dependencies->dependentsOf($extensionModel->extension_id),
+            'catalogItem' => $protectedPackage ? null : $this->catalog->findForPackage($extensionModel->extension_id),
             'protectedPackage' => $protectedPackage,
-            'backups' => PackageBackup::query()->where('extension_id', $extension->extension_id)->latest()->limit(10)->get(),
-            'operations' => ExtensionOperation::query()->where('extension_id', $extension->extension_id)->latest('started_at')->limit(20)->get(),
+            'backups' => PackageBackup::query()->where('extension_id', $extensionModel->extension_id)->latest()->limit(10)->get(),
+            'operations' => ExtensionOperation::query()->where('extension_id', $extensionModel->extension_id)->latest('started_at')->limit(20)->get(),
         ]);
     }
 
-    public function confirmUninstall(InstalledExtension $extension): View|RedirectResponse
+    public function confirmUninstall(string $extension): View|RedirectResponse
     {
-        $this->runtime->prepare();
-        if ($extension->extension_id === 'gaming-hub-manager') {
-            return redirect()->route('gaming-hub-manager.admin.packages.show', $extension)
+        $runtimeStatus = $this->runtime->prepare();
+        if (! $this->runtime->isReady($runtimeStatus)) {
+            return view('gaming-hub-manager::admin.migration-required', compact('runtimeStatus'));
+        }
+        $extensionModel = InstalledExtension::query()->findOrFail($extension);
+        if ($extensionModel->extension_id === 'gaming-hub-manager') {
+            return redirect()->route('gaming-hub-manager.admin.packages.show', $extensionModel)
                 ->with('error', 'Gaming Hub Manager reports its own installation but cannot uninstall itself.');
         }
 
         return view('gaming-hub-manager::admin.uninstall', [
-            'extension' => $extension,
-            'enabled' => $this->lifecycle->isEnabled($extension->extension_id),
-            'dependents' => $this->dependencies->dependentsOf($extension->extension_id),
+            'extension' => $extensionModel,
+            'enabled' => $this->lifecycle->isEnabled($extensionModel->extension_id),
+            'dependents' => $this->dependencies->dependentsOf($extensionModel->extension_id),
         ]);
     }
 
-    public function destroy(Request $request, InstalledExtension $extension): RedirectResponse
+    public function destroy(Request $request, string $extension): RedirectResponse
     {
-        $this->runtime->prepare();
-        if ($extension->extension_id === 'gaming-hub-manager') {
-            return redirect()->route('gaming-hub-manager.admin.packages.show', $extension)
+        $runtimeStatus = $this->runtime->prepare();
+        if (! $this->runtime->isReady($runtimeStatus)) {
+            return redirect()->route('gaming-hub-manager.admin.overview')
+                ->with('warning', 'Run the pending Gaming Hub Manager migrations before uninstalling packages.');
+        }
+        $extensionModel = InstalledExtension::query()->findOrFail($extension);
+        if ($extensionModel->extension_id === 'gaming-hub-manager') {
+            return redirect()->route('gaming-hub-manager.admin.packages.show', $extensionModel)
                 ->with('error', 'Gaming Hub Manager reports its own installation but cannot uninstall itself.');
         }
         $request->validate([
-            'confirmation' => ['required', 'string', 'in:'.$extension->extension_id],
+            'confirmation' => ['required', 'string', 'in:'.$extensionModel->extension_id],
             'retain_data' => ['required', 'accepted'],
         ], [
             'confirmation.in' => 'Type the exact package ID to confirm uninstall.',
@@ -79,9 +91,9 @@ final class PackageController extends Controller
         $operation = ExtensionOperation::create([
             'operation_uuid' => (string) Str::uuid(),
             'operation' => 'uninstall',
-            'extension_id' => $extension->extension_id,
-            'version' => $extension->installed_version,
-            'source_id' => $extension->source_id,
+            'extension_id' => $extensionModel->extension_id,
+            'version' => $extensionModel->installed_version,
+            'source_id' => $extensionModel->source_id,
             'actor_id' => $request->user()->getKey(),
             'started_at' => now(),
             'result' => 'running',
@@ -95,7 +107,7 @@ final class PackageController extends Controller
         ]);
 
         try {
-            $this->uninstaller->uninstall($extension, $operation);
+            $this->uninstaller->uninstall($extensionModel, $operation);
 
             return redirect()->route('gaming-hub-manager.admin.backups')
                 ->with('success', 'Package files removed. A verified recovery backup was retained.');

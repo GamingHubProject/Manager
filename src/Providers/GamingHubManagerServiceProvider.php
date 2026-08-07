@@ -24,6 +24,7 @@ use Azuriom\Plugin\GamingHubManager\Services\GitHubReleaseClient;
 use Azuriom\Plugin\GamingHubManager\Services\InstalledExtensionResolver;
 use Azuriom\Plugin\GamingHubManager\Services\LegacyMetadataImporter;
 use Azuriom\Plugin\GamingHubManager\Services\ManagerRuntime;
+use Azuriom\Plugin\GamingHubManager\Services\ManagerSchema;
 use Azuriom\Plugin\GamingHubManager\Services\ManagerSettings;
 use Azuriom\Plugin\GamingHubManager\Services\PackageCatalog;
 use Azuriom\Plugin\GamingHubManager\Services\PackageReleaseResolver;
@@ -59,6 +60,7 @@ final class GamingHubManagerServiceProvider extends BasePluginServiceProvider
             BackupManager::class,
             ExtensionInstaller::class,
             ExtensionUninstaller::class,
+            ManagerSchema::class,
             ManagerSettings::class,
             LegacyMetadataImporter::class,
             ManagerRuntime::class,

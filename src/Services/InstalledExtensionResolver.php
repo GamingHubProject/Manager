@@ -4,6 +4,7 @@ namespace Azuriom\Plugin\GamingHubManager\Services;
 
 use Azuriom\Plugin\GamingHubManager\Data\ExtensionManifest;
 use Azuriom\Plugin\GamingHubManager\Exceptions\ExtensionOperationFailed;
+use Azuriom\Plugin\GamingHubManager\Exceptions\InvalidExtensionManifest;
 use Azuriom\Plugin\GamingHubManager\Models\InstalledExtension;
 
 final class InstalledExtensionResolver
@@ -18,6 +19,16 @@ final class InstalledExtensionResolver
 
     public function reconcileFilesystem(): void
     {
+        foreach (InstalledExtension::query()->get() as $record) {
+            try {
+                $this->resolve($record->extension_id, true, false);
+            } catch (ExtensionOperationFailed|InvalidExtensionManifest) {
+                if ($record->exists) {
+                    $record->delete();
+                }
+            }
+        }
+
         $entries = scandir($this->paths->pluginsRoot()) ?: [];
         foreach ($entries as $entry) {
             if ($entry === '.' || $entry === '..' || str_starts_with($entry, '.')) {
@@ -25,6 +36,10 @@ final class InstalledExtensionResolver
             }
 
             $path = $this->paths->pluginsRoot().DIRECTORY_SEPARATOR.$entry;
+            if (! is_dir($path)) {
+                continue;
+            }
+
             $known = InstalledExtension::where('extension_id', $entry)->exists();
             $hasManagerManifest = is_file($path.'/gaming-hub-extension.json');
             if (! $known && ! $hasManagerManifest && ! str_starts_with($entry, 'gaming-hub-')) {
@@ -33,8 +48,8 @@ final class InstalledExtensionResolver
 
             try {
                 $this->resolve($entry, true, false);
-            } catch (\Throwable) {
-                // Unrelated, incomplete, or malformed plugin directories are ignored.
+            } catch (ExtensionOperationFailed|InvalidExtensionManifest) {
+                InstalledExtension::where('extension_id', $entry)->delete();
             }
         }
     }
@@ -45,13 +60,18 @@ final class InstalledExtensionResolver
         $record = InstalledExtension::where('extension_id', $extensionId)->first();
         $path = $this->paths->destination($extensionId);
         if (! is_dir($path)) {
-            if ($record !== null) {
-                return $record;
-            }
-            throw new ExtensionOperationFailed('Installed package metadata and files were not found.');
+            $record?->delete();
+
+            throw new ExtensionOperationFailed('Installed package files were not found.');
         }
 
-        $manifest = $this->readManifest($path, $extensionId);
+        try {
+            $manifest = $this->readManifest($path, $extensionId);
+        } catch (\Throwable $exception) {
+            $record?->delete();
+            throw $exception;
+        }
+
         if ($record === null && ! $createMetadata) {
             throw new ExtensionOperationFailed('Installed package metadata was not found.');
         }
@@ -90,7 +110,6 @@ final class InstalledExtensionResolver
 
         return InstalledExtension::updateOrCreate(['extension_id' => $extensionId], $values);
     }
-
 
     private function preserveRegistryContract(array $normalized, ?array $existing, bool $hasPackageManifest): array
     {

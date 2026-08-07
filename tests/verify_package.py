@@ -28,11 +28,11 @@ for name in ("plugin.json", "composer.json", "gaming-hub-extension.json", "resou
 plugin = json.loads((ROOT / "plugin.json").read_text(encoding="utf-8"))
 manifest = json.loads((ROOT / "gaming-hub-extension.json").read_text(encoding="utf-8"))
 require(plugin.get("id") == "gaming-hub-manager", "unexpected plugin ID")
-require(plugin.get("version") == "0.1.2", "unexpected release version")
+require(plugin.get("version") == "0.1.3", "unexpected release version")
 require(plugin.get("version") == manifest.get("version"), "plugin/manifest version mismatch")
 require(manifest.get("package", {}).get("plugin_directory") == plugin.get("id"), "plugin directory mismatch")
 
-required_pages = {"overview", "installed", "available", "registries", "logs", "backups", "settings", "package", "release", "uninstall"}
+required_pages = {"overview", "installed", "available", "registries", "logs", "backups", "settings", "package", "release", "uninstall", "migration-required"}
 views = {p.name.removesuffix(".blade.php") for p in (ROOT / "resources/views/admin").glob("*.blade.php")}
 require(required_pages <= views, f"missing admin views: {sorted(required_pages - views)}")
 
@@ -48,6 +48,8 @@ for required_file in (
     "tests/run-release-security.php",
     "tests/verify_release_pipeline.py",
     "src/Services/GitHubAssetDigestValidator.php",
+    "src/Services/ManagerSchema.php",
+    "tests/verify_clean_install.py",
     "src/Services/RegistryChecksumResolver.php",
     "src/Services/ReleaseVersionValidator.php",
 ):

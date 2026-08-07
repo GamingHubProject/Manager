@@ -23,7 +23,9 @@ final class SourceController extends Controller
 
     public function store(SaveExtensionSourceRequest $request): RedirectResponse
     {
-        $this->runtime->prepare();
+        if ($notReady = $this->notReady()) {
+            return $notReady;
+        }
         $data = $request->validated();
 
         try {
@@ -60,11 +62,14 @@ final class SourceController extends Controller
         }
     }
 
-    public function refresh(ExtensionSource $source): RedirectResponse
+    public function refresh(string $source): RedirectResponse
     {
-        $this->runtime->prepare();
+        if ($notReady = $this->notReady()) {
+            return $notReady;
+        }
+        $sourceModel = ExtensionSource::query()->findOrFail($source);
         try {
-            $this->manager->refresh($source, true);
+            $this->manager->refresh($sourceModel, true);
 
             return back()->with('success', 'Package source and GitHub release metadata refreshed.');
         } catch (\Throwable $exception) {
@@ -72,37 +77,57 @@ final class SourceController extends Controller
         }
     }
 
-    public function toggle(ExtensionSource $source): RedirectResponse
+    public function toggle(string $source): RedirectResponse
     {
-        $this->runtime->prepare();
-        if ($source->type === 'official') {
+        if ($notReady = $this->notReady()) {
+            return $notReady;
+        }
+        $sourceModel = ExtensionSource::query()->findOrFail($source);
+        if ($sourceModel->type === 'official') {
             return back()->with('error', 'The official registry cannot be disabled.');
         }
-        $source->update(['enabled' => ! $source->enabled]);
-        $this->manager->invalidate($source);
+        $sourceModel->update(['enabled' => ! $sourceModel->enabled]);
+        $this->manager->invalidate($sourceModel);
 
         return back()->with('success', 'Package source state changed.');
     }
 
-    public function trust(ExtensionSource $source): RedirectResponse
+    public function trust(string $source): RedirectResponse
     {
-        $this->runtime->prepare();
-        if ($source->type === 'official') {
+        if ($notReady = $this->notReady()) {
+            return $notReady;
+        }
+        $sourceModel = ExtensionSource::query()->findOrFail($source);
+        if ($sourceModel->type === 'official') {
             return back();
         }
-        $trusted = ! $source->trusted;
-        $source->update(['trusted' => $trusted, 'trust_level' => $trusted ? 'trusted' : 'untrusted']);
+        $trusted = ! $sourceModel->trusted;
+        $sourceModel->update(['trusted' => $trusted, 'trust_level' => $trusted ? 'trusted' : 'untrusted']);
 
         return back()->with('success', 'Package source trust changed.');
     }
 
-    public function destroy(ExtensionSource $source): RedirectResponse
+    public function destroy(string $source): RedirectResponse
     {
-        $this->runtime->prepare();
-        abort_if($source->type === 'official', 403);
-        $this->manager->invalidate($source);
-        $source->delete();
+        if ($notReady = $this->notReady()) {
+            return $notReady;
+        }
+        $sourceModel = ExtensionSource::query()->findOrFail($source);
+        abort_if($sourceModel->type === 'official', 403);
+        $this->manager->invalidate($sourceModel);
+        $sourceModel->delete();
 
         return back()->with('success', 'Package source removed.');
+    }
+
+    private function notReady(): ?RedirectResponse
+    {
+        $runtimeStatus = $this->runtime->prepare();
+        if ($this->runtime->isReady($runtimeStatus)) {
+            return null;
+        }
+
+        return redirect()->route('gaming-hub-manager.admin.overview')
+            ->with('warning', 'Run the pending Gaming Hub Manager migrations before managing package sources.');
     }
 }

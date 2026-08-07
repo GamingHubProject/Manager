@@ -7,12 +7,12 @@ use Azuriom\Plugin\GamingHubManager\Models\ExtensionSource;
 use Azuriom\Plugin\GamingHubManager\Models\InstalledExtension;
 use Azuriom\Plugin\GamingHubManager\Models\PackageBackup;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 use RuntimeException;
 
 final class LegacyMetadataImporter
 {
     public function __construct(
+        private ManagerSchema $schema,
         private ManagerSettings $settings,
         private InstalledExtensionResolver $resolver,
         private ExtensionPathGuard $paths,
@@ -29,6 +29,7 @@ final class LegacyMetadataImporter
      *     operations: int,
      *     backups: int,
      *     warnings: list<string>,
+     *     detected?: bool,
      *     disabled?: bool,
      *     throttled?: bool,
      *     last_run?: string
@@ -46,6 +47,10 @@ final class LegacyMetadataImporter
 
         if (! (bool) config('gaming-hub-manager.manager.auto_import_legacy_core_metadata', true)) {
             return $summary + ['disabled' => true];
+        }
+
+        if (! $this->legacyMetadataExists()) {
+            return $summary + ['detected' => false];
         }
 
         $lastRun = $this->settings->getInternal('legacy_import_last_run');
@@ -84,13 +89,49 @@ final class LegacyMetadataImporter
         return $summary;
     }
 
+    private function legacyMetadataExists(): bool
+    {
+        foreach ([
+            'gaminghub_extension_sources',
+            'gaminghub_installed_extensions',
+            'gaminghub_extension_operations',
+        ] as $table) {
+            if ($this->schema->tableExists($table) && DB::table($table)->limit(1)->exists()) {
+                return true;
+            }
+        }
+
+        return $this->legacyBackupMetadataExists();
+    }
+
+    private function legacyBackupMetadataExists(): bool
+    {
+        $root = storage_path('app/gaming-hub/extensions/backups');
+        if (! is_dir($root)) {
+            return false;
+        }
+
+        foreach (glob($root.'/*/*', GLOB_ONLYDIR) ?: [] as $packagePath) {
+            $packageId = basename($packagePath);
+            try {
+                $this->resolver->readManifest($packagePath, $packageId);
+
+                return true;
+            } catch (\Throwable) {
+                // Unrelated or invalid directories are not legacy installer metadata.
+            }
+        }
+
+        return false;
+    }
+
     /**
      * @param array{sources: int, packages: int, operations: int, backups: int, warnings: list<string>} $summary
      */
     private function importSources(array &$summary): void
     {
         try {
-            if (! Schema::hasTable('gaminghub_extension_sources')) {
+            if (! $this->schema->tableExists('gaminghub_extension_sources')) {
                 return;
             }
 
@@ -139,7 +180,7 @@ final class LegacyMetadataImporter
     private function importPackages(array &$summary): void
     {
         try {
-            if (! Schema::hasTable('gaminghub_installed_extensions')) {
+            if (! $this->schema->tableExists('gaminghub_installed_extensions')) {
                 return;
             }
 
@@ -152,30 +193,27 @@ final class LegacyMetadataImporter
                     if (InstalledExtension::where('extension_id', $extensionId)->exists()) {
                         continue;
                     }
-                    if (! is_dir($this->paths->destination($extensionId))) {
+                    $path = $this->paths->destination($extensionId);
+                    if (! is_dir($path)) {
                         throw new RuntimeException('Installed package directory is missing; stale legacy record skipped.');
                     }
 
-                    InstalledExtension::create([
-                        'extension_id' => $extensionId,
-                        'installed_version' => $this->requiredString($values, 'installed_version', 100),
+                    $package = $this->resolver->resolve($extensionId, true, false);
+                    $package->forceFill([
                         'source_type' => $this->string($values['source_type'] ?? null, 'legacy', 30),
                         'source_id' => $values['source_id'] ?? null,
                         'source_url' => $values['source_url'] ?? null,
-                        'repository_url' => $values['repository_url'] ?? null,
+                        'repository_url' => $values['repository_url'] ?? $package->repository_url,
                         'release_url' => $values['release_url'] ?? null,
                         'release_id' => $values['release_id'] ?? null,
                         'asset_name' => $values['asset_name'] ?? null,
                         'checksum' => $values['checksum'] ?? null,
                         'checksum_verified' => (bool) ($values['checksum_verified'] ?? false),
-                        'integrity_status' => 'unknown',
                         'trust_level' => $this->string($values['trust_level'] ?? null, 'legacy', 30),
                         'installed_by' => $values['installed_by'] ?? null,
-                        'installed_at' => $values['installed_at'] ?? null,
-                        'enabled_snapshot' => (bool) ($values['enabled_snapshot'] ?? false),
-                        'manifest_snapshot' => $this->decode($values['manifest_snapshot'] ?? null) ?? [],
+                        'installed_at' => $values['installed_at'] ?? $package->installed_at,
                         'last_operation_result' => 'imported',
-                    ]);
+                    ])->save();
                     $summary['packages']++;
                 } catch (\Throwable $exception) {
                     $this->warn($summary, $recordLabel, $exception);
@@ -192,7 +230,7 @@ final class LegacyMetadataImporter
     private function importOperations(array &$summary): void
     {
         try {
-            if (! Schema::hasTable('gaminghub_extension_operations')) {
+            if (! $this->schema->tableExists('gaminghub_extension_operations')) {
                 return;
             }
 

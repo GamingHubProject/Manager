@@ -27,12 +27,15 @@ final class DashboardController extends Controller
 
     public function overview(): View
     {
-        $legacy = $this->runtime->prepare();
-        $snapshot = $this->snapshotWithLegacyAlerts($legacy);
+        $runtimeStatus = $this->runtime->prepare();
+        if (! $this->runtime->isReady($runtimeStatus)) {
+            return $this->migrationRequired($runtimeStatus);
+        }
+        $snapshot = $this->snapshotWithLegacyAlerts($runtimeStatus);
 
         return view('gaming-hub-manager::admin.overview', [
             ...$snapshot,
-            'legacy' => $legacy,
+            'legacy' => $runtimeStatus,
             'recentOperations' => ExtensionOperation::query()->latest('started_at')->limit(10)->get(),
             'backupCount' => PackageBackup::query()->count(),
             'changedCount' => InstalledExtension::query()->where('integrity_status', 'changed')->count(),
@@ -41,28 +44,40 @@ final class DashboardController extends Controller
 
     public function installed(): View
     {
-        $legacy = $this->runtime->prepare();
+        $runtimeStatus = $this->runtime->prepare();
+        if (! $this->runtime->isReady($runtimeStatus)) {
+            return $this->migrationRequired($runtimeStatus);
+        }
 
-        return view('gaming-hub-manager::admin.installed', $this->snapshotWithLegacyAlerts($legacy));
+        return view('gaming-hub-manager::admin.installed', $this->snapshotWithLegacyAlerts($runtimeStatus));
     }
 
     public function available(): View
     {
-        $legacy = $this->runtime->prepare();
+        $runtimeStatus = $this->runtime->prepare();
+        if (! $this->runtime->isReady($runtimeStatus)) {
+            return $this->migrationRequired($runtimeStatus);
+        }
 
-        return view('gaming-hub-manager::admin.available', $this->snapshotWithLegacyAlerts($legacy));
+        return view('gaming-hub-manager::admin.available', $this->snapshotWithLegacyAlerts($runtimeStatus));
     }
 
     public function registries(): View
     {
-        $legacy = $this->runtime->prepare();
+        $runtimeStatus = $this->runtime->prepare();
+        if (! $this->runtime->isReady($runtimeStatus)) {
+            return $this->migrationRequired($runtimeStatus);
+        }
 
-        return view('gaming-hub-manager::admin.registries', $this->snapshotWithLegacyAlerts($legacy));
+        return view('gaming-hub-manager::admin.registries', $this->snapshotWithLegacyAlerts($runtimeStatus));
     }
 
     public function logs(): View
     {
-        $this->runtime->prepare();
+        $runtimeStatus = $this->runtime->prepare();
+        if (! $this->runtime->isReady($runtimeStatus)) {
+            return $this->migrationRequired($runtimeStatus);
+        }
 
         return view('gaming-hub-manager::admin.logs', [
             'operations' => ExtensionOperation::query()->latest('started_at')->paginate(50),
@@ -71,7 +86,10 @@ final class DashboardController extends Controller
 
     public function backups(): View
     {
-        $this->runtime->prepare();
+        $runtimeStatus = $this->runtime->prepare();
+        if (! $this->runtime->isReady($runtimeStatus)) {
+            return $this->migrationRequired($runtimeStatus);
+        }
 
         return view('gaming-hub-manager::admin.backups', [
             'backups' => PackageBackup::query()->latest()->paginate(50),
@@ -81,7 +99,10 @@ final class DashboardController extends Controller
 
     public function settings(): View
     {
-        $this->runtime->prepare();
+        $runtimeStatus = $this->runtime->prepare();
+        if (! $this->runtime->isReady($runtimeStatus)) {
+            return $this->migrationRequired($runtimeStatus);
+        }
         $pluginRoot = base_path('plugins');
         $storageRoot = storage_path('app/gaming-hub-manager');
 
@@ -120,7 +141,12 @@ final class DashboardController extends Controller
 
     public function updateSettings(Request $request): RedirectResponse
     {
-        $this->runtime->prepare();
+        $runtimeStatus = $this->runtime->prepare();
+        if (! $this->runtime->isReady($runtimeStatus)) {
+            return redirect()->route('gaming-hub-manager.admin.overview')
+                ->with('warning', 'Run the pending Gaming Hub Manager migrations before changing settings.');
+        }
+
         $data = $request->validate([
             'allow_private_hosts' => ['sometimes', 'boolean'],
             'retain_successful_update_backups' => ['sometimes', 'boolean'],
@@ -134,5 +160,10 @@ final class DashboardController extends Controller
         $this->settings->update($data);
 
         return back()->with('success', 'Gaming Hub Manager settings saved.');
+    }
+
+    private function migrationRequired(array $runtimeStatus): View
+    {
+        return view('gaming-hub-manager::admin.migration-required', compact('runtimeStatus'));
     }
 }

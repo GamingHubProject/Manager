@@ -1,11 +1,12 @@
 # Files
 
-Gaming Hub Manager 0.1.2 contains 99 files. No file in Gaming Hub Core, Gaming Hub Panel, or Azuriom core is changed.
+Gaming Hub Manager 0.1.3 contains 103 files. No file in Gaming Hub Core, Gaming Hub Panel, or Azuriom core is changed.
 
 ```text
 CHANGELOG.md
 FILES.md
 INSTALL.md
+Install.md
 LICENSE
 README.md
 UPGRADE.md
@@ -33,6 +34,7 @@ resources/views/admin/available.blade.php
 resources/views/admin/backups.blade.php
 resources/views/admin/installed.blade.php
 resources/views/admin/logs.blade.php
+resources/views/admin/migration-required.blade.php
 resources/views/admin/overview.blade.php
 resources/views/admin/package.blade.php
 resources/views/admin/partials/alerts.blade.php
@@ -89,6 +91,7 @@ src/Services/GitHubReleaseClient.php
 src/Services/InstalledExtensionResolver.php
 src/Services/LegacyMetadataImporter.php
 src/Services/ManagerRuntime.php
+src/Services/ManagerSchema.php
 src/Services/ManagerSettings.php
 src/Services/PackageCatalog.php
 src/Services/PackageReleaseResolver.php
@@ -99,6 +102,7 @@ src/Support/ManagerAlertNormalizer.php
 tests/run-alert-normalizer.php
 tests/run-manifest-inspection.php
 tests/run-release-security.php
+tests/verify_clean_install.py
 tests/verify_package.py
 tests/verify_release_pipeline.py
 tests/verify_view_contract.py
