@@ -22,13 +22,13 @@ Fish only downloads the file and launches Bash. Fish does not parse the installe
 ## Run on Fish / CachyOS
 
 ```fish
-rm -f /tmp/gaming-hub-install.sh; and curl -fL -H "Cache-Control: no-cache" "https://raw.githubusercontent.com/GamingHubProject/Manager/main/scripts/install.sh?nocache="(date +%s) -o /tmp/gaming-hub-install.sh; and bash /tmp/gaming-hub-install.sh
+set installer (mktemp); and curl -fL -H "Cache-Control: no-cache, no-store" "https://raw.githubusercontent.com/GamingHubProject/Registry/main/scripts/install.sh?nocache="(date +%s)"-"$fish_pid -o "$installer"; and bash "$installer"; rm -f "$installer"
 ```
 
 ## Run on Ubuntu / Bash
 
 ```bash
-rm -f /tmp/gaming-hub-install.sh && curl -fL -H "Cache-Control: no-cache" "https://raw.githubusercontent.com/GamingHubProject/Manager/main/scripts/install.sh?nocache=$(date +%s)" -o /tmp/gaming-hub-install.sh && bash /tmp/gaming-hub-install.sh
+installer="$(mktemp)" && curl -fL -H "Cache-Control: no-cache, no-store" "https://raw.githubusercontent.com/GamingHubProject/Registry/main/scripts/install.sh?nocache=$(date +%s)-$$" -o "$installer" && bash "$installer"; rm -f "$installer"
 ```
 
 ## Main menu
