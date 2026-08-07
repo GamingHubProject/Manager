@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.3 - 2026-08-06
+
+- Moved the built-in official registry and package repository references to `GamingHubProject`, using `https://raw.githubusercontent.com/GamingHubProject/Registry/main/registry.json` as the sole default registry URL.
+- Changed official-source bootstrap to create or reconcile exactly one protected `GamingHubProject Official Registry` without rewriting user-created custom registries.
+- Added a non-empty legacy-metadata gate so clean installations do not import Core sources, packages, operations, backups, warnings, or throttle markers.
+- Made the filesystem authoritative for installed-package reconciliation; missing directories, invalid `plugin.json` files, and mismatched package IDs now remove stale Manager metadata before catalog state is calculated.
+- Added Manager schema readiness checks for all five Manager tables, including PostgreSQL missing-table handling, and skip runtime preparation safely before or during migrations.
+- Added a safe administration warning page and removed implicit Manager model binding so missing Manager tables cannot be queried before readiness checks.
+- Added focused clean-install, repository migration, legacy gate, filesystem authority, route binding, and migration-readiness verification contracts.
+
 ## 0.1.2 - 2026-08-06
 
 - Made published GitHub Releases authoritative for GitHub-backed registry packages; deprecated `latest_version` is now optional and used only as a temporary fallback when GitHub discovery is unavailable.
