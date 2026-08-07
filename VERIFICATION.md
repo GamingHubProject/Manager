@@ -1,6 +1,52 @@
 # Verification
 
-M0.3 registry and legacy cleanup finalized on 2026-08-07 against Gaming Hub Manager 0.1.4 M0.2 Final.
+M0.4 database resilience implemented on 2026-08-07 against Gaming Hub Manager 0.1.4 M0.3 Finalized.
+
+## M0.4 database resilience contracts
+
+- Manager schema health is classified as `READY`, `MIGRATIONS_PENDING`, `SCHEMA_INCONSISTENT`, or `DATABASE_UNAVAILABLE`;
+- physical existence of all five Manager tables is checked before any Manager model/runtime preparation;
+- Laravel's migration repository is consulted to distinguish ordinary pending migrations from migration-history/table divergence;
+- a recorded Manager migration whose table is missing is `SCHEMA_INCONSISTENT`, including the historical `gaminghub_manager_operations` failure;
+- a Manager table that exists without its expected migration record is also reported as inconsistent when migration history is available;
+- inconsistent state is logged through Laravel's normal application logger using table/migration names only;
+- no migration rows are deleted and no table is created, dropped, reset, or otherwise repaired automatically;
+- Manager runtime returns before settings loading, operation cleanup, registry initialization, legacy import, filesystem/DB reconciliation, staging cleanup, or log pruning whenever schema health is not ready;
+- every current Manager admin read/mutation controller establishes runtime readiness before Manager table access or lifecycle work;
+- the existing migration-required page remains DB-independent and now shows schema state, missing tables, pending migrations, and detected history divergence without secrets or stack traces;
+- mutation redirects use state-aware recovery guidance rather than claiming every failure is a normal pending migration;
+- M0.2 package-state/lifecycle behavior and M0.3 registry/legacy behavior remain unchanged.
+
+## M0.4 verification commands
+
+```bash
+php tests/run-m04-schema-health.php
+php tests/run-m04-schema-exception-policy.php
+php tests/run-m04-runtime-guard.php
+python3 tests/verify_m04_database_resilience.py
+python3 tests/verify_m03_registry_cleanup.py
+python3 tests/verify_clean_install.py
+php tests/run-m03-registry-policy.php
+python3 tests/verify_m02_package_state.py
+php tests/run-manifest-inspection.php
+php tests/run-m02-dependency-graph.php
+python3 tests/verify_dependency_resolution.py
+python3 tests/verify_package.py
+python3 tests/verify_view_contract.py
+python3 tests/verify_release_pipeline.py
+php tests/run-alert-normalizer.php
+php tests/run-release-security.php
+```
+
+`php tests/run-dependency-resolution.php` remains the standalone Composer-SemVer runner. If no Composer autoloader is present it reports `SKIP`; that is not a runtime pass.
+
+## Real Azuriom integration verification
+
+The standalone M0.4 tests execute the production schema classifier and the production `ManagerRuntime` early-stop path, but they do not boot Azuriom or intentionally mutate a real database. In a disposable Azuriom v1.2.x environment, additionally verify a healthy installation, then remove only `gaminghub_manager_operations` while leaving its migration record present and confirm Manager renders the controlled `SCHEMA_INCONSISTENT` recovery page without HTTP 500 or raw `SQLSTATE[42P01]`. Restore the disposable database afterward.
+
+Do not report those HTTP/database integration steps as passed unless they were actually executed in a booted Azuriom installation.
+
+---
 
 ## M0.3 registry contracts
 

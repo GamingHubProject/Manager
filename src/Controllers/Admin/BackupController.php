@@ -87,6 +87,6 @@ final class BackupController extends Controller
         }
 
         return redirect()->route('gaming-hub-manager.admin.overview')
-            ->with('warning', 'Run the pending Gaming Hub Manager migrations before managing backups.');
+            ->with('warning', $this->runtime->recoveryMessage($runtimeStatus));
     }
 }

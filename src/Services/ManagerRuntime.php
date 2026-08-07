@@ -21,9 +21,15 @@ final class ManagerRuntime
 
     /**
      * @return array{
+     *     state: string,
+     *     schema_state: string,
      *     schema_ready: bool,
      *     database_available: bool,
+     *     migration_history_available: bool,
      *     missing_tables: list<string>,
+     *     pending_migrations: list<string>,
+     *     recorded_missing_tables: list<string>,
+     *     unrecorded_existing_tables: list<string>,
      *     sources: int,
      *     packages: int,
      *     operations: int,
@@ -70,6 +76,17 @@ final class ManagerRuntime
         $summary ??= $this->prepare();
 
         return (bool) ($summary['schema_ready'] ?? false);
+    }
+
+    public function recoveryMessage(?array $summary = null): string
+    {
+        $summary ??= $this->prepare();
+
+        return match ($summary['schema_state'] ?? null) {
+            ManagerSchema::DATABASE_UNAVAILABLE => 'Gaming Hub Manager cannot access the database. Restore database connectivity before continuing.',
+            ManagerSchema::SCHEMA_INCONSISTENT => 'Gaming Hub Manager database schema and migration history disagree. Automatic repair was not attempted; review the recovery page before continuing.',
+            default => 'Gaming Hub Manager database migrations are pending. Complete the supported Azuriom migration procedure before continuing.',
+        };
     }
 
     private function closeInterruptedOperations(): void

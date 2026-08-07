@@ -2,6 +2,10 @@
 
 ## 0.1.4 - 2026-08-07
 
+- Added M0.4 Manager database resilience with explicit `READY`, `MIGRATIONS_PENDING`, `SCHEMA_INCONSISTENT`, and `DATABASE_UNAVAILABLE` schema-health states.
+- Made physical Manager table state authoritative before runtime/model access and added Laravel migration-repository comparison so recorded-but-missing tables are classified as inconsistent instead of ordinary pending migrations.
+- Hardened the historical missing `gaminghub_manager_operations` case: Manager runtime now stops before operation cleanup/log access or any lifecycle mutation, and the controlled recovery page reports the missing table without attempting automatic repair.
+- Added state-aware recovery guidance and focused executable M0.4 schema/runtime guard regressions while preserving M0.2 package lifecycle and M0.3 registry behavior.
 - Finalized M0.3 registry ownership: the protected built-in source is `GamingHubProject Official Registry` at `https://raw.githubusercontent.com/GamingHubProject/Registry/main/registry.json`, with no environment override that can silently replace the canonical source.
 - Reconciled positively identified obsolete Manager official rows and historical Core-import official artifacts while preserving administrator-created custom registries.
 - Suppressed legacy official Core source import while retaining one-time migration support for genuine legacy custom sources, packages, operations, and validated backups.

@@ -144,7 +144,7 @@ final class DashboardController extends Controller
         $runtimeStatus = $this->runtime->prepare();
         if (! $this->runtime->isReady($runtimeStatus)) {
             return redirect()->route('gaming-hub-manager.admin.overview')
-                ->with('warning', 'Run the pending Gaming Hub Manager migrations before changing settings.');
+                ->with('warning', $this->runtime->recoveryMessage($runtimeStatus));
         }
 
         $data = $request->validate([

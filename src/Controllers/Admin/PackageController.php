@@ -75,7 +75,7 @@ final class PackageController extends Controller
         $runtimeStatus = $this->runtime->prepare();
         if (! $this->runtime->isReady($runtimeStatus)) {
             return redirect()->route('gaming-hub-manager.admin.overview')
-                ->with('warning', 'Run the pending Gaming Hub Manager migrations before uninstalling packages.');
+                ->with('warning', $this->runtime->recoveryMessage($runtimeStatus));
         }
         $extensionModel = $this->findInstalled($extension);
         if ($extensionModel->extension_id === 'gaming-hub-manager') {

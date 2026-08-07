@@ -131,6 +131,6 @@ final class SourceController extends Controller
         }
 
         return redirect()->route('gaming-hub-manager.admin.overview')
-            ->with('warning', 'Run the pending Gaming Hub Manager migrations before managing package sources.');
+            ->with('warning', $this->runtime->recoveryMessage($runtimeStatus));
     }
 }

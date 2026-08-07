@@ -103,7 +103,7 @@ check("39 executable production dependency graph traversal test exists", "getMet
 check("40 executable graph test covers transitive and disabled dependents", "'addon' => 3" in graph_test and "disabled-child" in graph_test and "=== false" in graph_test)
 check("41 M0.2 docs state normal Composer caret semantics", "^0.6.0` means `>=0.6.0 <0.7.0" in verification and "Core `0.7.0` does **not** satisfy `^0.6.0`" in verification)
 check("42 changelog contains no Core-specific SemVer widening claim", "pre-1.0 compatibility rule" not in changelog and "0.7.0` satisfies a `^0.6.0" not in changelog)
-check("43 verification records M0.3 completion without weakening M0.2", "M0.3 registry and legacy cleanup finalized" in verification and "M0.2 filesystem authority" in verification)
+check("43 verification retains completed M0.3 and M0.2 contracts", "## M0.3 registry contracts" in verification and "M0.2 filesystem authority" in verification)
 
 if errors:
     print(f"FAILED: {len(errors)} contract(s) failed; {len(passed)} passed")

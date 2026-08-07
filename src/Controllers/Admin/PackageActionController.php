@@ -388,7 +388,7 @@ final class PackageActionController extends Controller
         }
 
         return redirect()->route('gaming-hub-manager.admin.overview')
-            ->with('warning', 'Run the pending Gaming Hub Manager migrations before managing packages.');
+            ->with('warning', $this->runtime->recoveryMessage($runtimeStatus));
     }
 
     private function sourceError(Request $request, ExtensionSource $source, string $action): ?RedirectResponse
