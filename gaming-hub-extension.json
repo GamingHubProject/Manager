@@ -1,0 +1,27 @@
+{
+  "schema": 1,
+  "id": "gaming-hub-manager",
+  "name": "Gaming Hub Manager",
+  "version": "0.1.3",
+  "type": "utility",
+  "description": "Standalone lifecycle manager for Gaming Hub packages.",
+  "author": "Gaming Hub",
+  "repository": "https://github.com/GamingHubProject/gaming-hub-manager",
+  "requires": {
+    "azuriom": ">=1.2.0",
+    "php": ">=8.2",
+    "extensions": {}
+  },
+  "provides": {
+    "services": [
+      "package-lifecycle",
+      "package-registry",
+      "package-backups"
+    ]
+  },
+  "consumes": {},
+  "package": {
+    "plugin_directory": "gaming-hub-manager",
+    "checksum_algorithm": "sha256"
+  }
+}
