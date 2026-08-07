@@ -1,29 +1,32 @@
 # Verification
 
-M0.2 verification finalized on 2026-08-07 against Gaming Hub Manager 0.1.4.
+M0.3 registry and legacy cleanup finalized on 2026-08-07 against Gaming Hub Manager 0.1.4 M0.2 Final.
 
-## M0.2 passed contracts
+## M0.3 registry contracts
 
-- canonical package identity remains exact across `plugin.json`, `gaming-hub-extension.json`, registry metadata, installed directory names, and dependency declarations;
-- installed-package state is filesystem-authoritative and Manager metadata is reconciled from the installed manifests before dependency-sensitive decisions;
-- registry release metadata cannot by itself classify a package as installed or satisfy an installed dependency;
-- dependency compatibility uses `Composer\Semver\Semver::satisfies()` only; there is no package-specific Gaming Hub Core comparator and no custom fallback parser;
-- Composer caret semantics are preserved: `^0.6.0` means `>=0.6.0 <0.7.0`, therefore Core `0.7.0` does **not** satisfy `^0.6.0`;
-- packages supporting both Core 0.6.x and Core 0.7.x must publish an explicitly broader constraint, for example `>=0.6.0 <0.8.0` or `^0.6.0 || ^0.7.0`;
-- mandatory Gaming Hub dependencies and mandatory Azuriom `plugin.json` dependencies participate in the reverse dependency graph, including manually installed filesystem packages;
-- Azuriom optional `dependency?` declarations remain optional;
-- direct and transitive reverse dependents are traversed in deterministic depth/ID order;
-- update/reinstall keeps the existing target/dependent enabled-state snapshot, disables dependents deepest-first, restores the target first when previously enabled, then restores dependents outward; previously disabled packages are not intentionally enabled;
-- failed dependency/restoration operations do not report false success and retain detailed operation diagnostics;
-- successful install writes and reconciles installed metadata before returning so the next lifecycle request can resolve the actual installed package immediately;
-- existing checksum, release discovery, archive, version consistency, alert, navigation, independence, self-protection, filesystem-authority, schema-readiness, and migration-safety contracts remain unchanged by this M0.2 finalization;
-- no Gaming Hub Core, Gaming Hub Panel, Azuriom core file, registry URL, or deferred legacy registry/documentation reference is changed by this finalization.
+- the protected built-in registry is exactly `GamingHubProject Official Registry`;
+- its canonical URL is exactly `https://raw.githubusercontent.com/GamingHubProject/Registry/main/registry.json`;
+- the official source no longer accepts an environment override that can silently replace the canonical built-in URL;
+- bundled fallback and example registry data use the GamingHubProject organization and current Registry repository;
+- clean Manager initialization does not import Core registry data unless concrete non-empty historical metadata or a validated historical backup is present;
+- historical official Core sources are suppressed during migration because Manager now owns the canonical official registry;
+- genuine legacy custom sources remain eligible for non-destructive migration;
+- previously stored Manager-owned official rows and the exact historical Core-import official artifact shape are reconciled without deleting arbitrary administrator registries;
+- repeated initialization converges on one protected Manager official source and does not recreate a suppressed historical official import;
+- a new custom registry cannot be added when its URL normalizes to the canonical built-in official URL;
+- M0.2 filesystem authority, canonical IDs, Composer SemVer, dependency graph, lifecycle protection, state restoration, and immediate package refresh behavior remain unchanged.
+- M0.2 still uses normal Composer caret semantics: `^0.6.0` means `>=0.6.0 <0.7.0`, so Core `0.7.0` does **not** satisfy `^0.6.0`; support for both 0.6.x and 0.7.x requires an explicitly broader constraint.
 
-## M0.2 verification commands
+Historical owner/repository literals required solely to identify real upgrades are isolated in `src/Services/LegacyRegistryPolicy.php` and its focused migration regression test. They are not defaults, fallbacks, bundled sources, discovery repositories, or current documentation.
 
-The following source-workspace M0.2 checks must return `PASS`:
+## M0.3 verification commands
+
+These source-workspace checks must return `PASS`:
 
 ```bash
+python3 tests/verify_m03_registry_cleanup.py
+python3 tests/verify_clean_install.py
+php tests/run-m03-registry-policy.php
 python3 tests/verify_m02_package_state.py
 php tests/run-manifest-inspection.php
 php tests/run-m02-dependency-graph.php
@@ -35,36 +38,24 @@ php tests/run-alert-normalizer.php
 php tests/run-release-security.php
 ```
 
-Run the Composer-SemVer behavioral check separately:
+Run the executable Composer-SemVer check separately:
 
 ```bash
 php tests/run-dependency-resolution.php
 ```
 
-`tests/run-dependency-resolution.php` is an executable Composer-SemVer behavioral test. It requires a Composer autoloader containing `composer/semver` (as a normal Azuriom installation does). If no such autoloader exists in a standalone source workspace, it reports `SKIP`; that skip is not evidence that SemVer behavior executed. You can point it at a real Composer autoloader with `GAMING_HUB_TEST_AUTOLOAD=/path/to/vendor/autoload.php php tests/run-dependency-resolution.php`. For release verification, run it in an environment where `composer/semver` is actually available and record the result separately.
+If the standalone workspace has no Composer autoloader containing `composer/semver`, the SemVer runner reports `SKIP`; that is not a runtime pass. A real Azuriom installation may be supplied with `GAMING_HUB_TEST_AUTOLOAD=/path/to/vendor/autoload.php`.
 
-`tests/run-manifest-inspection.php` executes the production `ExtensionManifestValidator` directly for canonical-ID acceptance/rejection. `tests/run-m02-dependency-graph.php` executes the production dependency graph traversal with an in-memory package graph through reflection; it does not mock Eloquent or Azuriom lifecycle state.
+## Real Azuriom integration verification
 
-## M0.3 checks intentionally pending
+The pure registry policy test executes current/legacy URL normalization and exact migration ownership classification directly. Database-backed initialization, Eloquent source reconciliation, and Core installation effects still require a real Azuriom v1.2.x runtime.
 
-`python3 tests/verify_clean_install.py` currently mixes clean-install/filesystem-authority contracts with legacy owner/registry documentation cleanup checks. The latter are M0.3 work.
+In a real clean installation verify:
 
-During M0.2 finalization this script is therefore **not** part of the M0.2 pass gate. When run now, it is expected to report the remaining legacy owner / old-registry documentation references that are intentionally deferred to M0.3. Do not interpret that expected M0.3 failure as an M0.2 lifecycle regression, and do not claim the complete repository suite passes while those future-phase assertions remain.
+1. install Manager into clean Azuriom;
+2. open **Registries** and confirm exactly one GamingHubProject official registry at the canonical raw URL;
+3. confirm there is no Core-imported historical official source;
+4. revisit/re-run initialization and confirm no duplicate appears;
+5. install Core and confirm the Manager registry list remains unchanged.
 
-The M0.2-relevant clean-install behavior remains covered by `tests/verify_m02_package_state.py` and the unchanged filesystem/schema contracts. M0.3 will own removal of the deferred legacy references and will make the legacy-reference assertions in `verify_clean_install.py` eligible for the full release gate again.
-
-## Integration verification still required in a real Azuriom runtime
-
-Standalone verification cannot execute the Eloquent-backed installed-package map, real plugin-directory reconciliation inside a booted Laravel application, or Azuriom `PluginManager` enable/disable transitions end to end without a real Azuriom runtime.
-
-In a real Azuriom v1.2.x installation, additionally verify:
-
-1. install Gaming Hub Manager;
-2. install Gaming Hub Core;
-3. without manual refresh, immediately install Gaming Hub Panel;
-4. record the exact Core constraint declared by the Panel package being installed;
-5. record Core's actual installed manifest version;
-6. record the resulting `Composer\Semver\Semver::satisfies(installedCoreVersion, declaredConstraint)` decision;
-7. confirm Manager accepts or rejects the Panel operation consistently with that Composer decision.
-
-Do not report this scenario as passed unless those real runtime steps were actually executed.
+Do not report those runtime steps as passed unless they were actually executed in a booted Azuriom installation.

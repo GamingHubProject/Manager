@@ -53,7 +53,7 @@ After installation, Gaming Hub Core and supported extensions can be installed th
 
 Open the latest release page:
 
-https://github.com/RosesOfDorns/GamingHub-Manager/releases/latest
+https://github.com/GamingHubProject/Manager/releases/latest
 
 Under **Assets**, download the dedicated release file named similar to:
 
@@ -386,33 +386,22 @@ Administration
 → Registries
 ```
 
-Add the official Gaming Hub registry.
+Gaming Hub Manager creates and protects the official registry automatically.
+Do **not** add a second copy manually.
 
-Use:
+Verify that exactly one built-in entry exists with:
 
 ```text
 Name:
-RosesOfDorns Official Registry
+GamingHubProject Official Registry
 ```
 
 ```text
 Registry URL:
-https://raw.githubusercontent.com/RosesOfDorns/gaming-hub-registry/main/registry.json
+https://raw.githubusercontent.com/GamingHubProject/Registry/main/registry.json
 ```
 
-Recommended settings:
-
-```text
-Enabled:
-Yes
-```
-
-```text
-Trusted:
-Yes
-```
-
-Only mark a registry as trusted when you trust its owner and the packages it publishes.
+The built-in official registry is always enabled and trusted by Manager. Custom registries remain administrator-owned and should be trusted only when you trust their owner and packages.
 
 Save the registry.
 
@@ -762,7 +751,7 @@ tail -n 200 "$LOG"
 Open the raw registry address in your browser:
 
 ```text
-https://raw.githubusercontent.com/RosesOfDorns/gaming-hub-registry/main/registry.json
+https://raw.githubusercontent.com/GamingHubProject/Registry/main/registry.json
 ```
 
 It should display JSON.
@@ -945,15 +934,15 @@ This file can define:
 
 Report bugs through GitHub Issues:
 
-https://github.com/RosesOfDorns/GamingHub-Manager/issues
+https://github.com/GamingHubProject/Manager/issues
 
 Releases:
 
-https://github.com/RosesOfDorns/GamingHub-Manager/releases
+https://github.com/GamingHubProject/Manager/releases
 
 Official registry:
 
-https://github.com/RosesOfDorns/gaming-hub-registry
+https://github.com/GamingHubProject/Registry
 
 ---
 

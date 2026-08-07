@@ -19,6 +19,7 @@ final class LegacyMetadataImporter
         private BackupManager $backups,
         private DirectoryHasher $hasher,
         private ExtensionSafeMessage $messages,
+        private LegacyRegistryPolicy $legacyRegistry,
     ) {
     }
 
@@ -140,6 +141,10 @@ final class LegacyMetadataImporter
                 $recordLabel = 'Source record '.($values['id'] ?? 'unknown');
 
                 try {
+                    if ($this->legacyRegistry->suppressLegacyImport($values)) {
+                        continue;
+                    }
+
                     $sourceId = $this->requiredString($values, 'source_id', 100);
                     if (ExtensionSource::where('source_id', $sourceId)->exists()) {
                         continue;

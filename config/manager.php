@@ -1,10 +1,7 @@
 <?php
 
 return [
-    'official_registry_url' => env(
-        'GAMING_HUB_MANAGER_OFFICIAL_REGISTRY_URL',
-        'https://raw.githubusercontent.com/GamingHubProject/Registry/main/registry.json'
-    ),
+    'official_registry_url' => 'https://raw.githubusercontent.com/GamingHubProject/Registry/main/registry.json',
     'official_registry_fallback' => plugin_path('gaming-hub-manager/resources/registry/official.json'),
     'allow_private_hosts' => (bool) env('GAMING_HUB_MANAGER_ALLOW_PRIVATE_HOSTS', false),
     'registry_cache_ttl' => 300,

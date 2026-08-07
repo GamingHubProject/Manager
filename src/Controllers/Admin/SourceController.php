@@ -37,6 +37,9 @@ final class SourceController extends Controller
                 $this->guard->assertGithubRepository($data['url'], $allowPrivate);
             } else {
                 $this->guard->assertSafe($data['url'], $allowPrivate);
+                if ($this->manager->isOfficialRegistryUrl($data['url'])) {
+                    return back()->with('error', 'The GamingHubProject official registry is built in and already managed by Gaming Hub Manager.')->withInput();
+                }
             }
 
             ExtensionSource::create([

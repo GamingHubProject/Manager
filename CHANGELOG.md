@@ -2,6 +2,10 @@
 
 ## 0.1.4 - 2026-08-07
 
+- Finalized M0.3 registry ownership: the protected built-in source is `GamingHubProject Official Registry` at `https://raw.githubusercontent.com/GamingHubProject/Registry/main/registry.json`, with no environment override that can silently replace the canonical source.
+- Reconciled positively identified obsolete Manager official rows and historical Core-import official artifacts while preserving administrator-created custom registries.
+- Suppressed legacy official Core source import while retaining one-time migration support for genuine legacy custom sources, packages, operations, and validated backups.
+- Prevented administrators from adding a duplicate custom registry for the canonical built-in official URL and added focused M0.3 legacy/registry regression coverage.
 - Fixed immediate dependency resolution after installing Gaming Hub Core by reconciling filesystem-backed installed metadata before validating the next package.
 - Made the installed filesystem manifest version authoritative for dependency checks; Manager metadata is reconciled from that installed state and registry release metadata cannot satisfy dependencies.
 - Standardized all package dependency checks on normal Composer SemVer semantics with no Gaming Hub Core-specific widening. Under Composer semantics `^0.6.0` means `>=0.6.0 <0.7.0`, so Core `0.7.0` does not satisfy it; packages that support both Core 0.6.x and 0.7.x must declare an explicitly broader constraint such as `>=0.6.0 <0.8.0` or `^0.6.0 || ^0.7.0`.

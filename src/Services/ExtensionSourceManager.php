@@ -14,22 +14,39 @@ final class ExtensionSourceManager
         private ExtensionRegistryValidator $validator,
         private GitHubReleaseClient $github,
         private ExtensionSafeMessage $messages,
+        private LegacyRegistryPolicy $legacyRegistry,
     ) {
     }
 
     public const OFFICIAL_SOURCE_ID = 'gaminghubproject-official';
     public const OFFICIAL_NAME = 'GamingHubProject Official Registry';
+    public const OFFICIAL_URL = 'https://raw.githubusercontent.com/GamingHubProject/Registry/main/registry.json';
 
     public function ensureOfficial(): ExtensionSource
     {
-        $source = ExtensionSource::query()
-            ->where('source_id', self::OFFICIAL_SOURCE_ID)
-            ->where('type', 'official')
-            ->first()
-            ?? ExtensionSource::query()->where('type', 'official')->orderBy('id')->first();
+        $sources = ExtensionSource::query()->orderBy('id')->get();
+        $source = $sources->first(fn (ExtensionSource $candidate) =>
+            $candidate->source_id === self::OFFICIAL_SOURCE_ID && $candidate->type === 'official'
+        );
 
         if ($source === null) {
+            $source = $sources->first(fn (ExtensionSource $candidate) => $candidate->type === 'official');
+        }
+        if ($source === null) {
             $source = new ExtensionSource();
+        }
+
+        foreach ($sources as $candidate) {
+            if ($source->exists && $candidate->getKey() === $source->getKey()) {
+                continue;
+            }
+
+            if (! $this->legacyRegistry->isObsoleteManagedStoredSource($candidate->toArray())) {
+                continue;
+            }
+
+            Cache::forget($this->cacheKey($candidate));
+            $candidate->delete();
         }
 
         $sourceIdInUse = ExtensionSource::query()
@@ -40,25 +57,27 @@ final class ExtensionSourceManager
         $values = [
             'type' => 'official',
             'name' => self::OFFICIAL_NAME,
-            'url' => (string) config('gaming-hub-manager.manager.official_registry_url'),
+            'url' => self::OFFICIAL_URL,
             'trust_level' => 'official',
             'trusted' => true,
             'enabled' => true,
         ];
         if (! $sourceIdInUse) {
             $values['source_id'] = self::OFFICIAL_SOURCE_ID;
-        } elseif (! $source->exists) {
+        } elseif (! $source->exists || ! str_starts_with((string) $source->source_id, self::OFFICIAL_SOURCE_ID.'-managed-')) {
+            // Preserve an unexpected administrator-owned source_id collision.
+            // The official source gets one stable protected Manager-owned ID.
             $values['source_id'] = $this->availableOfficialSourceId();
         }
 
         $source->forceFill($values)->save();
 
-        ExtensionSource::query()
-            ->where('type', 'official')
-            ->where($source->getKeyName(), '!=', $source->getKey())
-            ->delete();
-
         return $source;
+    }
+
+    public function isOfficialRegistryUrl(string $url): bool
+    {
+        return $this->legacyRegistry->isCanonicalOfficialUrl($url);
     }
 
     private function availableOfficialSourceId(): string
