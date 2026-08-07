@@ -6,24 +6,6 @@ Gaming Hub Manager is a standalone Azuriom plugin that owns package lifecycle ma
 - [Docker installation](DOCKER-INSTALL.md)
 - [Architecture](docs/ARCHITECTURE.md)
 
-# One line install
-```bash
-set installer (mktemp)
-
-curl -fL \
-  "https://raw.githubusercontent.com/GamingHubProject/Manager/0e6cd25f294f4a47c51d616bcfd0a242acf3b8bd/scripts/install.sh" \
-  -o "$installer"
-
-grep -q 'INSTALLER_VERSION="2.2-domain-https"' "$installer"
-or begin
-    echo "Wrong installer downloaded."
-    rm -f "$installer"
-    exit 1
-end
-
-bash "$installer"
-rm -f "$installer"
-```
 
 After it go to https://your-domain.example/install/game/custom and finish the installation
 
