@@ -442,6 +442,11 @@ final class ExtensionInstaller
             'version' => $manifest->version,
         ])->save();
 
+        // Refresh installed-package metadata from the filesystem before resolving
+        // dependencies so a package installed in the immediately preceding request
+        // is visible without a manual catalog refresh.
+        $this->installed->reconcileFilesystem();
+
         $this->compatibility->assertCompatible(
             $manifest,
             $this->coreVersion(),
@@ -601,12 +606,11 @@ final class ExtensionInstaller
 
     private function coreVersion(): ?string
     {
-        $path = base_path('plugins/gaming-hub-core/plugin.json');
-        $plugin = is_file($path) ? json_decode((string) file_get_contents($path), true) : null;
+        $version = InstalledExtension::query()
+            ->where('extension_id', 'gaming-hub-core')
+            ->value('installed_version');
 
-        return is_array($plugin) && is_string($plugin['version'] ?? null)
-            ? $plugin['version']
-            : null;
+        return is_string($version) && $version !== '' ? $version : null;
     }
 
     private function workDirectory(ExtensionOperation $operation): string

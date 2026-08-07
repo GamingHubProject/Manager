@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.4 - 2026-08-07
+
+- Fixed immediate dependency resolution after installing Gaming Hub Core by reconciling filesystem-backed installed metadata before validating the next package.
+- Read the Core dependency version from persisted installed-package metadata instead of registry release data.
+- Added the Gaming Hub Core pre-1.0 compatibility rule required by Panel so installed Core `0.7.0` satisfies a `^0.6.0` Core requirement, while leaving Composer-compatible comparison behavior unchanged for PHP, Azuriom, and unrelated package dependencies.
+- Added detailed dependency-failure diagnostics with candidate package ID, requested dependency ID, installed package IDs and versions, constraint, installed version, and comparison result.
+- Added focused dependency-resolution tests covering immediate Core-to-Panel installation and comparator isolation.
+
 ## 0.1.3 - 2026-08-06
 
 - Moved the built-in official registry and package repository references to `GamingHubProject`, using `https://raw.githubusercontent.com/GamingHubProject/Registry/main/registry.json` as the sole default registry URL.

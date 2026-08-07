@@ -1,7 +1,7 @@
 {
   "id": "gaming-hub-manager",
   "name": "Gaming Hub Manager",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Standalone lifecycle manager for Gaming Hub packages, registries, releases, backups, rollback, integrity verification, and install logs.",
   "url": "https://github.com/GamingHubProject",
   "authors": [

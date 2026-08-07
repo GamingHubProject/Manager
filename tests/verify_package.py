@@ -28,7 +28,7 @@ for name in ("plugin.json", "composer.json", "gaming-hub-extension.json", "resou
 plugin = json.loads((ROOT / "plugin.json").read_text(encoding="utf-8"))
 manifest = json.loads((ROOT / "gaming-hub-extension.json").read_text(encoding="utf-8"))
 require(plugin.get("id") == "gaming-hub-manager", "unexpected plugin ID")
-require(plugin.get("version") == "0.1.3", "unexpected release version")
+require(plugin.get("version") == "0.1.4", "unexpected release version")
 require(plugin.get("version") == manifest.get("version"), "plugin/manifest version mismatch")
 require(manifest.get("package", {}).get("plugin_directory") == plugin.get("id"), "plugin directory mismatch")
 

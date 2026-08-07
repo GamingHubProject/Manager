@@ -251,10 +251,11 @@ final class PackageCatalog
         ];
         if (isset($requirements['gaming-hub-core'])) {
             $core = $installedById->get('gaming-hub-core');
-            if ($core === null) {
+            $constraint = $requirements['gaming-hub-core'];
+            if ($core === null || ! is_string($constraint)
+                || ! $this->versions->satisfiesPackageDependency('gaming-hub-core', $core->installed_version, $constraint)) {
                 return false;
             }
-            $versions['gaming-hub-core'] = $core->installed_version;
         }
         foreach ($versions as $key => $version) {
             $constraint = $requirements[$key] ?? null;
@@ -264,7 +265,7 @@ final class PackageCatalog
         }
         foreach (($requirements['extensions'] ?? []) as $id => $constraint) {
             $dependency = $installedById->get($id);
-            if (! is_string($constraint) || $dependency === null || ! $this->versions->satisfies($dependency->installed_version, $constraint)) {
+            if (! is_string($constraint) || $dependency === null || ! $this->versions->satisfiesPackageDependency((string) $id, $dependency->installed_version, $constraint)) {
                 return false;
             }
         }

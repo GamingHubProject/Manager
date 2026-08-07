@@ -4,6 +4,7 @@ namespace Azuriom\Plugin\GamingHubManager\Services;
 
 use Azuriom\Plugin\GamingHubManager\Data\ExtensionManifest;
 use Azuriom\Plugin\GamingHubManager\Exceptions\ExtensionCompatibilityFailed;
+use Azuriom\Plugin\GamingHubManager\Models\InstalledExtension;
 
 final class ExtensionCompatibility
 {
@@ -18,10 +19,19 @@ final class ExtensionCompatibility
             'php' => $phpVersion,
         ];
         if (isset($manifest->requires['gaming-hub-core'])) {
-            if ($coreVersion === null) {
-                throw new ExtensionCompatibilityFailed('Gaming Hub Core is required but is not installed.');
+            $constraint = $manifest->requires['gaming-hub-core'];
+            $satisfied = is_string($constraint)
+                && $coreVersion !== null
+                && $this->versions->satisfiesPackageDependency('gaming-hub-core', $coreVersion, $constraint);
+            if (! $satisfied) {
+                throw new ExtensionCompatibilityFailed($this->dependencyFailure(
+                    $manifest->id,
+                    'gaming-hub-core',
+                    $coreVersion,
+                    is_string($constraint) ? $constraint : '(invalid)',
+                    $satisfied,
+                ));
             }
-            $checks['gaming-hub-core'] = $coreVersion;
         }
 
         foreach ($checks as $key => $version) {
@@ -31,4 +41,26 @@ final class ExtensionCompatibility
             }
         }
     }
+
+    private function dependencyFailure(
+        string $candidateId,
+        string $dependencyId,
+        ?string $installedVersion,
+        string $constraint,
+        bool $satisfied,
+    ): string {
+        $installed = InstalledExtension::query()
+            ->orderBy('extension_id')
+            ->pluck('installed_version', 'extension_id')
+            ->map(static fn ($version): string => (string) $version)
+            ->all();
+
+        return 'Dependency validation failed: package='.$candidateId
+            .'; requested='.$dependencyId
+            .'; installed_packages='.json_encode($installed, JSON_UNESCAPED_SLASHES)
+            .'; installed_version='.($installedVersion ?? 'missing')
+            .'; constraint='.$constraint
+            .'; comparison='.($satisfied ? 'satisfied' : 'not_satisfied').'.';
+    }
+
 }

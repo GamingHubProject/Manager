@@ -1,14 +1,20 @@
 # Verification
 
-Verification performed on 2026-08-06 against Gaming Hub Manager 0.1.3.
+Verification performed on 2026-08-07 against Gaming Hub Manager 0.1.4.
 
 ## Passed
 
+- canonical dependency ID remains exactly `gaming-hub-core` from package manifest through installed metadata and resolver lookup;
+- installed dependency metadata is reconciled from the filesystem immediately before validation, with no manual refresh required;
+- Core installed version is read from `gaminghub_manager_packages.installed_version`, not registry release metadata;
+- Gaming Hub Core `0.7.0` satisfies the Manager package-dependency requirement `^0.6.0`;
+- the special pre-1.0 Core rule does not alter the base Composer-compatible comparator or unrelated package dependency behavior;
+- failed dependency validation includes requested package ID, installed package IDs and versions, constraint, installed version, and exact comparison result in the operation failure message;
+- successful install metadata is persisted before `install()` returns, and no deferred package persistence or surrounding Manager transaction delays visibility to the next request;
 - PHP syntax validation for all PHP, migration, route, test, configuration, and Blade files;
-- JSON validation and matching `0.1.3` plugin/package-manifest versions;
+- JSON validation and matching `0.1.4` plugin/package-manifest versions;
 - exact default official registry name and `GamingHubProject/Registry` raw URL;
 - bundled and example registries use only `GamingHubProject` repositories;
-- no former repository-owner or legacy registry-repository reference remains in the package;
 - clean-install legacy import is gated before throttle metadata or import side effects;
 - absent and empty legacy tables produce a silent no-import result;
 - validated real legacy metadata remains importable and the import remains idempotent by stable IDs;
@@ -26,16 +32,21 @@ Verification performed on 2026-08-06 against Gaming Hub Manager 0.1.3.
 ## Focused test commands
 
 ```bash
+php tests/run-dependency-resolution.php
+python3 tests/verify_dependency_resolution.py
 python3 tests/verify_package.py
 python3 tests/verify_view_contract.py
 python3 tests/verify_release_pipeline.py
-python3 tests/verify_clean_install.py
 php tests/run-alert-normalizer.php
 php tests/run-manifest-inspection.php
 php tests/run-release-security.php
 ```
 
-All focused test programs return `PASS`.
+All dependency-resolution and existing functional focused tests listed above return `PASS`.
+
+## Pre-existing out-of-scope test finding
+
+`python3 tests/verify_clean_install.py` still reports two documentation-only legacy references in `INSTALL.md` from the attached 0.1.3 source. They are unrelated to dependency resolution and were intentionally not changed in this dependency-only patch. The clean-install runtime guards exercised by the dependency fix are unchanged.
 
 ## Environment limitation
 

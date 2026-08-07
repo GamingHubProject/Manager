@@ -1,10 +1,12 @@
-# Upgrade to 0.1.3
+# Upgrade to 0.1.4
 
 1. Back up the Azuriom database, `plugins/gaming-hub-manager`, and `storage/app/gaming-hub-manager`.
 2. Disable Gaming Hub Manager from **Administration → Extensions → Plugins**.
-3. Replace only the `plugins/gaming-hub-manager` directory with the directory from the 0.1.3 ZIP.
+This release fixes dependency resolution after installing Gaming Hub Core; no registry or database schema changes are required.
+
+3. Replace only the `plugins/gaming-hub-manager` directory with the directory from the 0.1.4 ZIP.
 4. Re-enable Gaming Hub Manager.
-5. Run the existing Manager migrations. Version 0.1.3 adds no new migration, but this repairs installations where one or more Manager tables were never created or were removed:
+5. Run the existing Manager migrations. Version 0.1.4 adds no new migration, but this repairs installations where one or more Manager tables were never created or were removed:
 
    ```bash
    php artisan migrate --force

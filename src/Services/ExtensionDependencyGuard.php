@@ -22,8 +22,16 @@ final class ExtensionDependencyGuard
             }
 
             $installed = InstalledExtension::where('extension_id', $dependencyId)->first();
-            if ($installed === null || ! $this->versions->satisfies($installed->installed_version, $constraint)) {
-                throw new ExtensionOperationFailed($candidate->id.' requires '.$dependencyId.' '.$constraint.'.');
+            $satisfied = $installed !== null
+                && $this->versions->satisfiesPackageDependency($dependencyId, $installed->installed_version, $constraint);
+            if (! $satisfied) {
+                throw new ExtensionOperationFailed($this->dependencyFailure(
+                    $candidate->id,
+                    $dependencyId,
+                    $installed?->installed_version,
+                    $constraint,
+                    $satisfied,
+                ));
             }
         }
     }
@@ -33,10 +41,15 @@ final class ExtensionDependencyGuard
         $this->assertCandidateDependencies($candidate);
 
         foreach ($this->dependentsOf($candidate->id) as $dependent) {
-            if (! $this->versions->satisfies($candidate->version, $dependent['constraint'])) {
-                throw new ExtensionOperationFailed(
-                    'Update blocked because '.$dependent['id'].' requires '.$candidate->id.' '.$dependent['constraint'].'.',
-                );
+            $satisfied = $this->versions->satisfiesPackageDependency($candidate->id, $candidate->version, $dependent['constraint']);
+            if (! $satisfied) {
+                throw new ExtensionOperationFailed($this->dependencyFailure(
+                    $dependent['id'],
+                    $candidate->id,
+                    $candidate->version,
+                    $dependent['constraint'],
+                    $satisfied,
+                ));
             }
         }
     }
@@ -53,6 +66,27 @@ final class ExtensionDependencyGuard
                 'Uninstall blocked because these installed extensions depend on it: '.implode(', ', array_column($dependents, 'id')).'.',
             );
         }
+    }
+
+    private function dependencyFailure(
+        string $candidateId,
+        string $dependencyId,
+        ?string $installedVersion,
+        string $constraint,
+        bool $satisfied,
+    ): string {
+        $installed = InstalledExtension::query()
+            ->orderBy('extension_id')
+            ->pluck('installed_version', 'extension_id')
+            ->map(static fn ($version): string => (string) $version)
+            ->all();
+
+        return 'Dependency validation failed: package='.$candidateId
+            .'; requested='.$dependencyId
+            .'; installed_packages='.json_encode($installed, JSON_UNESCAPED_SLASHES)
+            .'; installed_version='.($installedVersion ?? 'missing')
+            .'; constraint='.$constraint
+            .'; comparison='.($satisfied ? 'satisfied' : 'not_satisfied').'.';
     }
 
     /**

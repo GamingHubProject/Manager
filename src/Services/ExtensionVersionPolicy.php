@@ -30,6 +30,25 @@ final class ExtensionVersionPolicy
         }
     }
 
+    public function satisfiesPackageDependency(string $dependencyId, string $version, string $constraint): bool
+    {
+        $constraint = trim($constraint);
+        $version = $this->normalize($version);
+
+        // Gaming Hub Core remains pre-1.0 and its package compatibility contract
+        // treats ^0.x.y as a minimum within the 0.x line. Keep Composer semantics
+        // unchanged for every other package and for PHP/Azuriom constraints.
+        if ($dependencyId === 'gaming-hub-core'
+            && preg_match('/^\^0\.([1-9]\d*)\.(\d+)$/', $constraint, $matches)) {
+            $minimum = '0.'.$matches[1].'.'.$matches[2];
+
+            return version_compare($version, $minimum, '>=')
+                && version_compare($version, '1.0.0', '<');
+        }
+
+        return $this->satisfies($version, $constraint);
+    }
+
     public function satisfies(string $version, string $constraint): bool
     {
         if (class_exists(\Composer\Semver\Semver::class)) {
